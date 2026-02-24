@@ -1,0 +1,47 @@
+# LaTeX auxiliary files
+*.aux
+*.lof
+*.lot
+*.fls
+*.out
+*.toc
+*.fmt
+*.fot
+*.cb
+*.cb2
+.*.lb
+
+# LaTeX build files
+*.fdb_latexmk
+*.synctex.gz
+*.synctex(busy)
+
+# Beamer-specific
+*.nav
+*.snm
+*.vrb
+
+# Bibliography
+*.bbl
+*.bcf
+*.blg
+*-blx.aux
+*-blx.bib
+*.run.xml
+
+# Index
+*.idx
+*.ilg
+*.ind
+
+# Other LaTeX files
+*.log
+*.xdv
+*.dvi
+*.ps
+
+# Backup and temporary files
+*~
+*.backup
+*.bak
+*.tmp
