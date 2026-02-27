@@ -18,6 +18,9 @@ import { startAuctionEndNotifier } from './scripts/auctionEndNotifier.js';
 import homeRouter from './routes/home.route.js';
 import productRouter from './routes/product.route.js';
 import accountRouter from './routes/account.route.js';
+import authRouter from './routes/auth.route.js';
+import biddingActivityRouter from './routes/bidding-activity.route.js';
+import reputationRouter from './routes/reputation.route.js';
 import adminCategoryRouter from './routes/admin/category.route.js';
 import adminUserRouter from './routes/admin/user.route.js';
 import adminAccountRouter from './routes/admin/account.route.js';
@@ -398,7 +401,10 @@ app.get('/api/categories', async (req, res) => {
 // Các Route Client (Đặt cuối cùng để tránh override)
 app.use('/', homeRouter);
 app.use('/products', productRouter);
+app.use('/account', authRouter);
 app.use('/account', accountRouter);
+app.use('/account', biddingActivityRouter);
+app.use('/account', reputationRouter);
 
 app.listen(PORT, function () {
   console.log(`Server is running on http://localhost:${PORT}`);

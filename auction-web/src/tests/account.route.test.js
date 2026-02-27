@@ -49,6 +49,7 @@ global.fetch = jest.fn();
 
 // Create Express App
 const accountRouter = (await import("../routes/account.route.js")).default;
+const authRouter = (await import("../routes/auth.route.js")).default;
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -69,6 +70,7 @@ app.use((req, res, next) => {
 });
 
 app.use("/account", accountRouter);
+app.use("/account", authRouter);
 
 describe("Integration Tests: account.route.js", () => {
   beforeEach(() => {
