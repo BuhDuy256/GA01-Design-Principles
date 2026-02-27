@@ -29,6 +29,8 @@ jest.unstable_mockModule("../models/user.model.js", () => mockUserModel);
 // Mock Mailer
 const mockMailer = {
   sendMail: jest.fn(),
+  sendVerificationOtp: jest.fn(),
+  sendPasswordResetOtp: jest.fn()
 };
 jest.unstable_mockModule("../utils/mailer.js", () => mockMailer);
 
@@ -136,7 +138,7 @@ describe("Integration Tests: account.route.js", () => {
       );
       expect(mockUserModel.add).toHaveBeenCalled();
       expect(mockUserModel.createOtp).toHaveBeenCalled();
-      expect(mockMailer.sendMail).toHaveBeenCalledTimes(1);
+      expect(mockMailer.sendVerificationOtp).toHaveBeenCalledTimes(1);
     });
 
     test("IT-REG-04: POST /verify-email valid OTP should redirect to signin", async () => {
@@ -210,7 +212,7 @@ describe("Integration Tests: account.route.js", () => {
         "/account/verify-email?email=test%40example.com",
       );
       expect(mockUserModel.createOtp).toHaveBeenCalled();
-      expect(mockMailer.sendMail).toHaveBeenCalled();
+      expect(mockMailer.sendVerificationOtp).toHaveBeenCalled();
     });
 
     test("IT-AUTH-04: POST /signin correct creds and verified email", async () => {
@@ -248,7 +250,7 @@ describe("Integration Tests: account.route.js", () => {
         "vwAccount/auth/verify-forgot-password-otp",
       );
       expect(mockUserModel.createOtp).toHaveBeenCalled();
-      expect(mockMailer.sendMail).toHaveBeenCalled();
+      expect(mockMailer.sendPasswordResetOtp).toHaveBeenCalled();
     });
 
     test("IT-REC-03: POST /reset-password valid passwords", async () => {

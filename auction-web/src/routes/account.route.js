@@ -7,7 +7,8 @@ import * as watchlistModel from '../models/watchlist.model.js';
 import * as reviewModel from '../models/review.model.js';
 import * as autoBiddingModel from '../models/autoBidding.model.js';
 import { isAuthenticated } from '../middlewares/auth.mdw.js';
-import { sendMail } from '../utils/mailer.js';
+import { sendMail, sendVerificationOtp, sendPasswordResetOtp } from '../utils/mailer.js';
+import { verifyCaptcha } from '../middlewares/verifyCaptcha.js';
 
 const router = express.Router();
 
@@ -88,15 +89,7 @@ router.post('/forgot-password', async (req, res) => {
     purpose: 'reset_password',
     expires_at: expiresAt,
   });
-  await sendMail({
-    to: email,
-    subject: 'Password Reset for Your Online Auction Account',
-    html: `
-      <p>Hi ${user.fullname},</p>
-      <p>Your OTP code for password reset is: <strong>${otp}</strong></p>
-      <p>This code will expire in 15 minutes.</p>
-    `,
-  });
+  await sendPasswordResetOtp(email, user.fullname, otp);
   return res.render('vwAccount/auth/verify-forgot-password-otp', {
     email,
   });
@@ -137,15 +130,7 @@ router.post('/resend-forgot-password-otp', async (req, res) => {
     purpose: 'reset_password',
     expires_at: expiresAt,
   });
-  await sendMail({
-    to: email,
-    subject: 'New OTP for Password Reset',
-    html: `
-      <p>Hi ${user.fullname},</p>
-      <p>Your new OTP code for password reset is: <strong>${otp}</strong></p>
-      <p>This code will expire in 15 minutes.</p>
-    `,
-  });
+  await sendPasswordResetOtp(email, user.fullname, otp, true);
   return res.render('vwAccount/auth/verify-forgot-password-otp', {
     email,
     info_message: 'We have sent a new OTP to your email. Please check your inbox.',
@@ -204,15 +189,7 @@ router.post('/signin', async function (req, res) {
       expires_at: expiresAt,
     });
 
-    await sendMail({
-      to: email,
-      subject: 'Verify your Online Auction account',
-      html: `
-        <p>Hi ${user.fullname},</p>
-        <p>Your OTP code is: <strong>${otp}</strong></p>
-        <p>This code will expire in 15 minutes.</p>
-      `,
-    });
+    await sendVerificationOtp(email, user.fullname, otp);
 
     return res.redirect(
       `/account/verify-email?email=${encodeURIComponent(email)}`
@@ -228,7 +205,7 @@ router.post('/signin', async function (req, res) {
 });
 
 // POST /signup
-router.post('/signup', async function (req, res) {
+router.post('/signup', verifyCaptcha, async function (req, res) {
   const { fullname, email, address, password, confirmPassword } = req.body;
   
   // --- SỬA LỖI: Lấy token recaptcha từ body ---
@@ -238,25 +215,9 @@ router.post('/signup', async function (req, res) {
   const old = { fullname, email, address };
   const recaptchaSiteKey = process.env.RECAPTCHA_SITE_KEY;
 
-  // // --- BẮT ĐẦU XỬ LÝ RECAPTCHA ---
-  if (!recaptchaResponse) {
-      errors.captcha = 'Please check the captcha box.';
-  } else {
-      // Gọi Google API để verify
-      const secretKey = process.env.RECAPTCHA_SECRET;
-      const verifyUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${secretKey}&response=${recaptchaResponse}`;
-      
-      try {
-          const response = await fetch(verifyUrl, { method: 'POST' });
-          const data = await response.json();
-          // data.success trả về true nếu verify thành công
-          if (!data.success) {
-               errors.captcha = 'Captcha verification failed. Please try again.';
-          }
-      } catch (err) {
-          console.error('Recaptcha error:', err);
-          errors.captcha = 'Error connecting to captcha server.';
-      }
+  // // --- BẮT ĐẦU XỬ LÝ RECAPTCHA ---  (Đã chuyển logic vào middleware verifyCaptcha)
+  if (req.captchaErrors && req.captchaErrors.captcha) {
+      errors.captcha = req.captchaErrors.captcha;
   }
   // --- KẾT THÚC XỬ LÝ RECAPTCHA ---
   if (!fullname) errors.fullname = 'Full name is required';
@@ -306,19 +267,7 @@ router.post('/signup', async function (req, res) {
     email
   )}`;
 
-  await sendMail({
-    to: email,
-    subject: 'Verify your Online Auction account',
-    html: `
-        <p>Hi ${fullname},</p>
-        <p>Thank you for registering at Online Auction.</p>
-        <p>Your OTP code is: <strong>${otp}</strong></p>
-        <p>This code will expire in 15 minutes.</p>
-        <p>You can enter this code on the verification page, or click the link below:</p>
-        <p><a href="${verifyUrl}">Verify your email</a></p>
-        <p>If you did not register, please ignore this email.</p>
-        `,
-  });
+  await sendVerificationOtp(email, fullname, otp, false, verifyUrl);
 
   // Chuyển sang trang verify email (GET /verify-email)
   return res.redirect(
@@ -387,15 +336,7 @@ router.post('/resend-otp', async (req, res) => {
     expires_at: expiresAt,
   });
 
-  await sendMail({
-    to: email,
-    subject: 'New OTP for email verification',
-    html: `
-      <p>Hi ${user.fullname},</p>
-      <p>Your new OTP code is: <strong>${otp}</strong></p>
-      <p>This code will expire in 15 minutes.</p>
-    `,
-  });
+  await sendVerificationOtp(email, user.fullname, otp, true);
 
   return res.render('vwAccount/verify-otp', {
     email,

@@ -39,4 +39,54 @@ export async function sendMail({ to, subject, html }) {
   });
 }
 
+/**
+ * Send OTP for email verification
+ */
+export async function sendVerificationOtp(email, fullname, otp, isResend = false, verifyUrl = null) {
+  let subject = 'Verify your Online Auction account';
+  if (isResend) {
+    subject = 'New OTP for email verification';
+  }
+
+  let htmlTemplate = `
+    <p>Hi ${fullname || 'User'},</p>
+    <p>${isResend ? '' : 'Thank you for registering at Online Auction.<br>'}Your OTP code is: <strong>${otp}</strong></p>
+    <p>This code will expire in 15 minutes.</p>
+  `;
+
+  if (verifyUrl) {
+    htmlTemplate += `
+      <p>You can enter this code on the verification page, or click the link below:</p>
+      <p><a href="${verifyUrl}">Verify your email</a></p>
+      <p>If you did not register, please ignore this email.</p>
+    `;
+  }
+
+  return sendMail({
+    to: email,
+    subject: subject,
+    html: htmlTemplate
+  });
+}
+
+/**
+ * Send OTP for password reset
+ */
+export async function sendPasswordResetOtp(email, fullname, otp, isResend = false) {
+  let subject = 'Password Reset for Your Online Auction Account';
+  if (isResend) {
+    subject = 'New OTP for Password Reset';
+  }
+
+  return sendMail({
+    to: email,
+    subject: subject,
+    html: `
+      <p>Hi ${fullname || 'User'},</p>
+      <p>Your ${isResend ? 'new ' : ''}OTP code for password reset is: <strong>${otp}</strong></p>
+      <p>This code will expire in 15 minutes.</p>
+    `,
+  });
+}
+
 export { transporter };
