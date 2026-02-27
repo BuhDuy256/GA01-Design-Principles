@@ -238,7 +238,7 @@ router.post('/signup', async function (req, res) {
   const old = { fullname, email, address };
   const recaptchaSiteKey = process.env.RECAPTCHA_SITE_KEY;
 
-  // // --- BẮT ĐẦU XỬ LÝ RECAPTCHA ---
+  // --- BẮT ĐẦU XỬ LÝ RECAPTCHA ---
   if (!recaptchaResponse) {
       errors.captcha = 'Please check the captcha box.';
   } else {
