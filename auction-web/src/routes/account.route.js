@@ -7,14 +7,12 @@ import * as watchlistModel from '../models/watchlist.model.js';
 import * as reviewModel from '../models/review.model.js';
 import * as autoBiddingModel from '../models/autoBidding.model.js';
 import { isAuthenticated } from '../middlewares/auth.mdw.js';
-import { sendMail, sendVerificationOtp, sendPasswordResetOtp } from '../utils/mailer.js';
 import { verifyCaptcha } from '../middlewares/verifyCaptcha.js';
+import { AuthService } from '../services/auth.service.js';
 
 const router = express.Router();
 
-function generateOtp() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
+// Generate OTP is now in AuthService
 
 router.get('/ratings', isAuthenticated, async (req, res) => {
   const currentUserId = req.session.authUser.id;
@@ -75,62 +73,46 @@ router.get('/forgot-password', (req, res) => {
 });
 router.post('/forgot-password', async (req, res) => {
   const { email } = req.body;
-  const user = await userModel.findByEmail(email);
-  if (!user) {
+  const { error } = await AuthService.processPasswordResetRequest(email, false);
+  
+  if (error) {
     return res.render('vwAccount/auth/forgot-password', {
-      error_message: 'Email not found.',
+      error_message: error,
     });
   }
-  const otp = generateOtp();
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 phút
-  await userModel.createOtp({
-    user_id: user.id,
-    otp_code: otp,
-    purpose: 'reset_password',
-    expires_at: expiresAt,
-  });
-  await sendPasswordResetOtp(email, user.fullname, otp);
+  
   return res.render('vwAccount/auth/verify-forgot-password-otp', {
     email,
   });
 });
 router.post('/verify-forgot-password-otp', async (req, res) => {
     const { email, otp } = req.body;
-    const user = await userModel.findByEmail(email);
-    const otpRecord = await userModel.findValidOtp({
-      user_id: user.id,
-      otp_code: otp,
-      purpose: 'reset_password',
-    });
     console.log('Verifying OTP for email:', email, ' OTP:', otp);
-    if (!otpRecord) {
+    
+    const { error } = await AuthService.verifyPasswordResetOtp(email, otp);
+    
+    if (error) {
       console.log('Invalid OTP attempt for email:', email);
       return res.render('vwAccount/auth/verify-forgot-password-otp', {
         email,
-        error_message: 'Invalid or expired OTP.',
+        error_message: error,
       });
     }
-    await userModel.markOtpUsed(otpRecord.id);
+    
     return res.render('vwAccount/auth/reset-password', { email });
 });
 router.post('/resend-forgot-password-otp', async (req, res) => {
   const { email } = req.body;
-  const user = await userModel.findByEmail(email);
-  if (!user) {
+  
+  const { error } = await AuthService.processPasswordResetRequest(email, true);
+  
+  if (error) {
     return res.render('vwAccount/auth/verify-forgot-password-otp', {
       email,
-      error_message: 'User not found.',
+      error_message: error,
     });
   }
-  const otp = generateOtp();
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 phút
-  await userModel.createOtp({
-    user_id: user.id,
-    otp_code: otp,
-    purpose: 'reset_password',
-    expires_at: expiresAt,
-  });
-  await sendPasswordResetOtp(email, user.fullname, otp, true);
+  
   return res.render('vwAccount/auth/verify-forgot-password-otp', {
     email,
     info_message: 'We have sent a new OTP to your email. Please check your inbox.',
@@ -144,15 +126,16 @@ router.post('/reset-password', async (req, res) => {
       error_message: 'Passwords do not match.',
     });
   }
-  const user = await userModel.findByEmail(email);
-  if (!user) {
+  
+  const { error } = await AuthService.resetPassword(email, new_password);
+  
+  if (error) {
     return res.render('vwAccount/auth/reset-password', {
       email,
-      error_message: 'User not found.',
+      error_message: error,
     });
   }
-  const hashedPassword = bcrypt.hashSync(new_password, 10);
-  await userModel.update(user.id, { password_hash: hashedPassword });
+  
   return res.render('vwAccount/auth/signin', {
     success_message: 'Your password has been reset. You can sign in now.',
   });
@@ -161,39 +144,19 @@ router.post('/reset-password', async (req, res) => {
 router.post('/signin', async function (req, res) {
   const { email, password } = req.body;
 
-  const user = await userModel.findByEmail(email);
-  if (!user) {
-    return res.render('vwAccount/auth/signin', {
-      error_message: 'Invalid email or password',
-      old: { email },
-    });
-  }
+  const { user, error, unverified } = await AuthService.loginWithCredentials(email, password);
 
-  const isPasswordValid = bcrypt.compareSync(password, user.password_hash);
-  if (!isPasswordValid) {
+  if (error) {
     return res.render('vwAccount/auth/signin', {
-      error_message: 'Invalid email or password',
+      error_message: error,
       old: { email },
     });
   }
 
   // Chưa verify email -> gửi OTP và chuyển sang trang verify
-  if (!user.email_verified) {
-    const otp = generateOtp();
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 phút
-
-    await userModel.createOtp({
-      user_id: user.id,
-      otp_code: otp,
-      purpose: 'verify_email',
-      expires_at: expiresAt,
-    });
-
-    await sendVerificationOtp(email, user.fullname, otp);
-
-    return res.redirect(
-      `/account/verify-email?email=${encodeURIComponent(email)}`
-    );
+  if (unverified) {
+    await AuthService.resendVerificationOtp(email);
+    return res.redirect(`/account/verify-email?email=${encodeURIComponent(email)}`);
   }
 
   // Đã verify -> login bình thường
@@ -208,12 +171,8 @@ router.post('/signin', async function (req, res) {
 router.post('/signup', verifyCaptcha, async function (req, res) {
   const { fullname, email, address, password, confirmPassword } = req.body;
   
-  // --- SỬA LỖI: Lấy token recaptcha từ body ---
-  const recaptchaResponse = req.body['g-recaptcha-response'];
-  
   const errors = {};
   const old = { fullname, email, address };
-  const recaptchaSiteKey = process.env.RECAPTCHA_SITE_KEY;
 
   // // --- BẮT ĐẦU XỬ LÝ RECAPTCHA ---  (Đã chuyển logic vào middleware verifyCaptcha)
   if (req.captchaErrors && req.captchaErrors.captcha) {
@@ -223,9 +182,6 @@ router.post('/signup', verifyCaptcha, async function (req, res) {
   if (!fullname) errors.fullname = 'Full name is required';
   if (!address) errors.address = 'Address is required';
   if (!email) errors.email = 'Email is required';
-
-  const isEmailExist = await userModel.findByEmail(email);
-  if (isEmailExist) errors.email = 'Email is already in use';
 
   if (!password) errors.password = 'Password is required';
   if (password !== confirmPassword)
@@ -239,35 +195,16 @@ router.post('/signup', verifyCaptcha, async function (req, res) {
     });
   }
 
-  const hashedPassword = bcrypt.hashSync(req.body.password, 10);
-  console.log(hashedPassword);
-  const user = {
-    email: req.body.email,
-    fullname: req.body.fullname,
-    address: req.body.address,
-    password_hash: hashedPassword,
-    role: 'bidder',
-  };
+  const verifyUrlBase = `${process.env.APP_BASE_URL}/account/verify-email`;
+  const { error } = await AuthService.registerUser({ fullname, email, address, password }, verifyUrlBase);
 
-  const newUser = await userModel.add(user);
-
-  const otp = generateOtp();
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 phút
-
-  console.log('User id: ', newUser.id, ' OTP: ', otp);
-
-  await userModel.createOtp({
-    user_id: newUser.id,
-    otp_code: otp,
-    purpose: 'verify_email',
-    expires_at: expiresAt,
-  });
-
-  const verifyUrl = `${process.env.APP_BASE_URL}/account/verify-email?email=${encodeURIComponent(
-    email
-  )}`;
-
-  await sendVerificationOtp(email, fullname, otp, false, verifyUrl);
+  if (error) {
+    return res.render('vwAccount/auth/signup', {
+      errors: error,
+      old,
+      error_message: 'Please correct the errors below.',
+    });
+  }
 
   // Chuyển sang trang verify email (GET /verify-email)
   return res.redirect(
@@ -279,29 +216,14 @@ router.post('/signup', verifyCaptcha, async function (req, res) {
 router.post('/verify-email', async (req, res) => {
   const { email, otp } = req.body;
 
-  const user = await userModel.findByEmail(email);
-  if (!user) {
-    return res.render('vwAccount/verify-otp', {
-      email,
-      error_message: 'User not found.',
-    });
-  }
+  const { error } = await AuthService.verifyEmailOtp(email, otp);
 
-  const otpRecord = await userModel.findValidOtp({
-    user_id: user.id,
-    otp_code: otp,
-    purpose: 'verify_email',
-  });
-
-  if (!otpRecord) {
+  if (error) {
     return res.render('vwAccount/auth/verify-otp', {
       email,
-      error_message: 'Invalid or expired OTP.',
+      error_message: error,
     });
   }
-
-  await userModel.markOtpUsed(otpRecord.id);
-  await userModel.verifyUserEmail(user.id);
 
   req.session.success_message =
     'Your email has been verified. You can sign in now.';
@@ -312,31 +234,20 @@ router.post('/verify-email', async (req, res) => {
 router.post('/resend-otp', async (req, res) => {
   const { email } = req.body;
 
-  const user = await userModel.findByEmail(email);
-  if (!user) {
+  const { error, alreadyVerified } = await AuthService.resendVerificationOtp(email);
+
+  if (error) {
     return res.render('vwAccount/auth/verify-otp', {
       email,
-      error_message: 'User not found.',
+      error_message: error,
     });
   }
 
-  if (user.email_verified) {
+  if (alreadyVerified) {
     return res.render('vwAccount/auth/signin', {
       success_message: 'Your email is already verified. Please sign in.',
     });
   }
-
-  const otp = generateOtp();
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 phút
-
-  await userModel.createOtp({
-    user_id: user.id,
-    otp_code: otp,
-    purpose: 'verify_email',
-    expires_at: expiresAt,
-  });
-
-  await sendVerificationOtp(email, user.fullname, otp, true);
 
   return res.render('vwAccount/verify-otp', {
     email,

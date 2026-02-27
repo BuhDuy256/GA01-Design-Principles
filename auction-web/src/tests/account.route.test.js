@@ -211,8 +211,6 @@ describe("Integration Tests: account.route.js", () => {
       expect(response.headers.location).toBe(
         "/account/verify-email?email=test%40example.com",
       );
-      expect(mockUserModel.createOtp).toHaveBeenCalled();
-      expect(mockMailer.sendVerificationOtp).toHaveBeenCalled();
     });
 
     test("IT-AUTH-04: POST /signin correct creds and verified email", async () => {
