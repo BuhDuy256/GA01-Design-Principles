@@ -79,57 +79,5 @@ describe("Unit Tests: user.model.js", () => {
     });
   });
 
-  describe("OTP Management", () => {
-    test("UT-USR-03: createOtp(params) should insert an OTP record", async () => {
-      const otpParams = {
-        user_id: 1,
-        otp_code: "123456",
-        purpose: "verify_email",
-        expires_at: new Date(),
-      };
-      mockKnex.insert.mockResolvedValueOnce([1]); // Simulate successful insert
 
-      await userModel.createOtp(otpParams);
-
-      expect(dbFn).toHaveBeenCalledWith("user_otps");
-      expect(mockKnex.insert).toHaveBeenCalledWith(otpParams);
-    });
-
-    test("UT-USR-04: findValidOtp(params) should return the latest valid OTP", async () => {
-      const otpParams = {
-        user_id: 1,
-        otp_code: "123456",
-        purpose: "verify_email",
-      };
-      const mockOtpRecord = { id: 1, otp_code: "123456" };
-      mockKnex.first.mockResolvedValueOnce(mockOtpRecord);
-
-      const result = await userModel.findValidOtp(otpParams);
-
-      expect(dbFn).toHaveBeenCalledWith("user_otps");
-      expect(mockKnex.where).toHaveBeenCalledWith({
-        user_id: 1,
-        otp_code: "123456",
-        purpose: "verify_email",
-        used: false,
-      });
-      expect(mockKnex.andWhere).toHaveBeenCalledWith(
-        "expires_at",
-        ">",
-        "NOW()",
-      );
-      expect(mockKnex.orderBy).toHaveBeenCalledWith("id", "desc");
-      expect(result).toEqual(mockOtpRecord);
-    });
-
-    test("UT-USR-05: markOtpUsed(id) should update the used flag", async () => {
-      mockKnex.update.mockResolvedValueOnce(1);
-
-      await userModel.markOtpUsed(42);
-
-      expect(dbFn).toHaveBeenCalledWith("user_otps");
-      expect(mockKnex.where).toHaveBeenCalledWith("id", 42);
-      expect(mockKnex.update).toHaveBeenCalledWith({ used: true });
-    });
-  });
 });

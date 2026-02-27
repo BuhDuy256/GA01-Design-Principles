@@ -1,5 +1,5 @@
 import express from 'express';
-import bcrypt from 'bcryptjs';
+import { UserService } from '../services/user.service.js';
 import * as userModel from '../models/user.model.js';
 import * as upgradeRequestModel from '../models/upgradeRequest.model.js';
 import { isAuthenticated } from '../middlewares/auth.mdw.js';
@@ -38,74 +38,23 @@ router.get('/profile', isAuthenticated, async (req, res) => {
 // PUT /profile - XỬ LÝ UPDATE
 router.put('/profile', isAuthenticated, async (req, res) => {
   try {
-    // 1. Lấy dữ liệu từ form (Bổ sung address)
-    const { email, fullname, address, date_of_birth, old_password, new_password, confirm_new_password } = req.body;
     const currentUserId = req.session.authUser.id;
+    const { error, user, updatedUser } = await UserService.updateProfile(currentUserId, req.body);
 
-    // Lấy thông tin user hiện tại
-    const currentUser = await userModel.findById(currentUserId);
-
-    // 2. KIỂM TRA MẬT KHẨU CŨ (Chỉ cho non-OAuth users)
-    if (!currentUser.oauth_provider) {
-      if (!old_password || !bcrypt.compareSync(old_password, currentUser.password_hash)) {
-        return res.render('vwAccount/profile', {
-          user: currentUser,
-          err_message: 'Password is incorrect!'
-        });
-      }
+    if (error) {
+      return res.render('vwAccount/profile', {
+        user: user,
+        err_message: error
+      });
     }
 
-    // 3. KIỂM TRA TRÙNG EMAIL
-    if (email !== currentUser.email) {
-      const existingUser = await userModel.findByEmail(email);
-      if (existingUser) {
-        return res.render('vwAccount/profile', {
-          user: currentUser,
-          err_message: 'Email is already in use by another user.'
-        });
-      }
-    }
-
-    // 4. KIỂM TRA MẬT KHẨU MỚI (Chỉ cho non-OAuth users)
-    if (!currentUser.oauth_provider && new_password) {
-      if (new_password !== confirm_new_password) {
-        return res.render('vwAccount/profile', {
-          user: currentUser,
-          err_message: 'New passwords do not match.'
-        });
-      }
-    }
-
-    // 5. CHUẨN BỊ DỮ LIỆU UPDATE
-    const entity = {
-      email,
-      fullname,
-      address: address || currentUser.address,
-      date_of_birth: date_of_birth ? new Date(date_of_birth) : currentUser.date_of_birth,
-    };
-    
-    // Chỉ cập nhật password cho non-OAuth users
-    if (!currentUser.oauth_provider) {
-      entity.password_hash = new_password
-        ? bcrypt.hashSync(new_password, 10)
-        : currentUser.password_hash;
-    }
-
-    // 6. GỌI MODEL UPDATE (Model đã sửa để trả về Object)
-    const updatedUser = await userModel.update(currentUserId, entity);
-    console.log('Updated user result:', updatedUser);
-
-    // 7. CẬP NHẬT SESSION
     if (updatedUser) {
-      delete updatedUser.password_hash;
       req.session.authUser = updatedUser;
     }
 
-    // 8. THÀNH CÔNG -> Redirect về trang profile kèm query success
     return res.redirect('/account/profile?success=true');
 
-  } 
-  catch (err) {
+  } catch (err) {
     console.error(err);
     return res.render('vwAccount/profile', {
       user: req.session.authUser,

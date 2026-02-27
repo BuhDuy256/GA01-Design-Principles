@@ -26,6 +26,13 @@ const mockUserModel = {
 };
 jest.unstable_mockModule("../models/user.model.js", () => mockUserModel);
 
+const mockOtpModel = {
+  createOtp: jest.fn().mockResolvedValue([1]),
+  findValidOtp: jest.fn(),
+  markOtpUsed: jest.fn().mockResolvedValue(1),
+};
+jest.unstable_mockModule("../models/otp.model.js", () => mockOtpModel);
+
 // Mock Mailer
 const mockMailer = {
   sendMail: jest.fn(),
@@ -139,7 +146,7 @@ describe("Integration Tests: account.route.js", () => {
         "/account/verify-email?email=test%40example.com",
       );
       expect(mockUserModel.add).toHaveBeenCalled();
-      expect(mockUserModel.createOtp).toHaveBeenCalled();
+      expect(mockOtpModel.createOtp).toHaveBeenCalled();
       expect(mockMailer.sendVerificationOtp).toHaveBeenCalledTimes(1);
     });
 
@@ -148,7 +155,7 @@ describe("Integration Tests: account.route.js", () => {
         id: 1,
         email: "test@example.com",
       });
-      mockUserModel.findValidOtp.mockResolvedValueOnce({
+      mockOtpModel.findValidOtp.mockResolvedValueOnce({
         id: 99,
         otp_code: "123456",
       });
@@ -159,7 +166,7 @@ describe("Integration Tests: account.route.js", () => {
 
       expect(response.status).toBe(302);
       expect(response.headers.location).toBe("/account/signin");
-      expect(mockUserModel.markOtpUsed).toHaveBeenCalledWith(99);
+      expect(mockOtpModel.markOtpUsed).toHaveBeenCalledWith(99);
       expect(mockUserModel.verifyUserEmail).toHaveBeenCalledWith(1);
     });
   });
@@ -249,8 +256,25 @@ describe("Integration Tests: account.route.js", () => {
       expect(response.body.view).toBe(
         "vwAccount/auth/verify-forgot-password-otp",
       );
-      expect(mockUserModel.createOtp).toHaveBeenCalled();
+      expect(mockOtpModel.createOtp).toHaveBeenCalled();
       expect(mockMailer.sendPasswordResetOtp).toHaveBeenCalled();
+    });
+
+    test("IT-REC-02: POST /verify-forgot-password-otp sets session and redirects", async () => {
+      mockOtpModel.findValidOtp.mockResolvedValue({ id: 1, otp_code: "123456" });
+      mockUserModel.findByEmail.mockResolvedValueOnce({
+        id: 1,
+        email: "test@example.com",
+        fullname: "Test User",
+      });
+
+      const response = await request(app)
+        .post("/account/verify-forgot-password-otp")
+        .send({ email: "test@example.com", otp: "123456" });
+
+      expect(response.status).toBe(200);
+      expect(response.body.view).toBe("vwAccount/auth/reset-password");
+      expect(mockOtpModel.markOtpUsed).toHaveBeenCalledWith(1);
     });
 
     test("IT-REC-03: POST /reset-password valid passwords", async () => {

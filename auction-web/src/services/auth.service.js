@@ -1,6 +1,8 @@
 // services/auth.service.js
 import { sendVerificationOtp, sendPasswordResetOtp } from '../utils/mailer.js';
+import crypto from 'crypto';
 import * as userModel from '../models/user.model.js';
+import * as otpModel from '../models/otp.model.js';
 import bcrypt from 'bcryptjs';
 
 function generateOtp() {
@@ -36,7 +38,7 @@ export const AuthService = {
     const otp = generateOtp();
     const expiresAt = new Date(Date.now() + OTP_EXPIRES_IN_MINUTES * 60 * 1000);
 
-    await userModel.createOtp({
+    await otpModel.createOtp({
       user_id: newUser.id,
       otp_code: otp,
       purpose: 'verify_email',
@@ -91,7 +93,7 @@ export const AuthService = {
     const otp = generateOtp();
     const expiresAt = new Date(Date.now() + OTP_EXPIRES_IN_MINUTES * 60 * 1000);
 
-    await userModel.createOtp({
+    await otpModel.createOtp({
       user_id: user.id,
       otp_code: otp,
       purpose: 'verify_email',
@@ -112,7 +114,7 @@ export const AuthService = {
     const user = await userModel.findByEmail(email);
     if (!user) return { error: 'User not found.' };
 
-    const otpRecord = await userModel.findValidOtp({
+    const otpRecord = await otpModel.findValidOtp({
       user_id: user.id,
       otp_code: otp,
       purpose: 'verify_email',
@@ -120,7 +122,7 @@ export const AuthService = {
 
     if (!otpRecord) return { error: 'Invalid or expired OTP.' };
 
-    await userModel.markOtpUsed(otpRecord.id);
+    await otpModel.markOtpUsed(otpRecord.id);
     await userModel.verifyUserEmail(user.id);
     return {};
   },
@@ -138,7 +140,7 @@ export const AuthService = {
     const otp = generateOtp();
     const expiresAt = new Date(Date.now() + OTP_EXPIRES_IN_MINUTES * 60 * 1000);
 
-    await userModel.createOtp({
+    await otpModel.createOtp({
       user_id: user.id,
       otp_code: otp,
       purpose: 'reset_password',
@@ -159,7 +161,7 @@ export const AuthService = {
     const user = await userModel.findByEmail(email);
     if (!user) return { error: 'User not found.' };
 
-    const otpRecord = await userModel.findValidOtp({
+    const otpRecord = await otpModel.findValidOtp({
       user_id: user.id,
       otp_code: otp,
       purpose: 'reset_password',
@@ -167,7 +169,7 @@ export const AuthService = {
 
     if (!otpRecord) return { error: 'Invalid or expired OTP.' };
 
-    await userModel.markOtpUsed(otpRecord.id);
+    await otpModel.markOtpUsed(otpRecord.id);
     return {};
   },
 
