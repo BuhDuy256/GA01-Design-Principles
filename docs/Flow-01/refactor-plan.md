@@ -83,9 +83,22 @@ Create the following route files and update `index.js` to mount them:
 
 ---
 
-## Phase 5: Verification & Cleanup
-
+## Phase 5: Verification & Route Restructuring
 - Run the test suites (Unit + Integration).
 - Manually verify the UI navigation using the new decoupled routes.
 - Remove unused imports from all files.
 - Confirm the code lines flagged in the audit report (SRP failures, manual HTML rendering) are successfully mitigated.
+
+---
+
+## Phase 6: Final SRP Cleanup (Profile & OTP)
+
+**Goal:** Address the final identified SRP violations in the data access and profile routes.
+
+### 6.1 `OtpModel` (`models/otp.model.js`)
+- **Action:** Extract OTP-specific database operations (`createOtp`, `findValidOtp`, `markOtpUsed`) out of `user.model.js`.
+- **Benefit:** `user.model.js` only handles users. `otp.model.js` handles the `user_otps` table. (SRP)
+
+### 6.2 `UserService` (`services/user.service.js`)
+- **Action:** Extract the complex business logic inside `PUT /profile` (password hashing, comparisons, uniqueness checks).
+- **Benefit:** The `account.route.js` will become as thin as `auth.route.js`, delegating strictly to the service layer.
