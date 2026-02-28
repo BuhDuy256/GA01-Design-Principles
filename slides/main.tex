@@ -591,6 +591,202 @@ router.get('/bid-history/:id',
   \end{center}
 \end{frame}
 
+% =========================================================
+% SECTION: Core Bidding Logic Extraction
+% Issues #4, #5, #8
+% =========================================================
+\section{Refactoring: Issues \#4, \#5, \#8 — Core Bidding Architecture}
+
+% ----------------------------------------------------------
+% ISSUE #4 — Slide 1: Problem
+% ----------------------------------------------------------
+\begin{frame}{Issue \#4 — SRP + KISS: \texttt{POST /bid} là God Handler (~430 dòng)}
+  \textbf{Vấn đề:} Một handler thực hiện \textbf{15 bước liên tiếp}, không có bước nào được đặt tên hay tách hàm.
+
+  \bigskip
+  \textbf{Nguyên tắc vi phạm:} \alert{SRP} + \alert{KISS}
+
+  \bigskip
+  \begin{block}{Trong một function duy nhất, code thực hiện đồng thời}
+    \begin{columns}[t]
+      \column{0.46\textwidth}
+      \textbf{Domain concerns:}
+      \begin{itemize}
+        \item 5 eligibility checks
+        \item Bid amount validation
+        \item 4-case proxy bidding algorithm
+        \item Buy-now price enforcement
+      \end{itemize}
+      \column{0.50\textwidth}
+      \textbf{Infrastructure concerns:}
+      \begin{itemize}
+        \item DB transaction + row lock
+        \item 3 table writes
+        \item 3 email HTML bodies
+        \item Parallel email dispatch
+      \end{itemize}
+    \end{columns}
+  \end{block}
+
+  \bigskip
+  \textbf{Hậu quả:}
+  \begin{itemize}
+    \item Không thể unit test bất kỳ bước nào một cách độc lập
+    \item Thêm một validation mới = đọc 430 dòng để tìm đúng vị trí insert
+    \item Risk regression cao: một bug trong step 3 có thể ảnh hưởng step 12
+  \end{itemize}
+\end{frame}
+
+% ----------------------------------------------------------
+% ISSUE #5 — Slide 1: Problem
+% ----------------------------------------------------------
+\begin{frame}{Issue \#5 — OCP: Thuật Toán Proxy Bidding Bị Nhúng Vào Route}
+  \textbf{Vấn đề:} 4-case \texttt{if/else} cho thuật toán đấu giá tự động nằm \textbf{trực tiếp trong HTTP handler}, không được đặt tên hay cô lập.
+
+  \bigskip
+  \textbf{Nguyên tắc vi phạm:} \alert{OCP}
+
+  \bigskip
+  \begin{alertblock}{Invariants của thuật toán — không có tên, không có documentation}
+    \begin{enumerate}
+      \item \textbf{Self-bid:} Nếu user đã là highest bidder → chỉ update max price, không đổi current price
+      \item \textbf{First bid:} Chưa có ai đặt → giá hiện tại = starting price
+      \item \textbf{New bid $<$ existing max:} Người cũ thắng, giá = new bid amount
+      \item \textbf{New bid $\geq$ existing max:} Người mới thắng, giá = old max + step
+    \end{enumerate}
+  \end{alertblock}
+
+  \bigskip
+  \textbf{Vi phạm OCP:} Thêm loại bid mới (sealed bid, Dutch auction) = \textbf{sửa trực tiếp} production route handler — không thể extend mà không modify.
+\end{frame}
+
+% ----------------------------------------------------------
+% ISSUE #8 — Slide 1: Problem
+% ----------------------------------------------------------
+\begin{frame}[fragile]{Issue \#8 — DIP: Route Phụ Thuộc Trực Tiếp Vào Infrastructure}
+  \textbf{Vấn đề:} HTTP handler (high-level) import và gọi trực tiếp \textbf{concrete implementations} (low-level).
+
+  \bigskip
+  \textbf{Nguyên tắc vi phạm:} \alert{DIP}
+
+  \bigskip
+  \begin{columns}[t]
+    \column{0.54\textwidth}
+    \textbf{Route biết quá nhiều về infrastructure:}
+    \footnotesize
+    \begin{verbatim}
+// product.route.js
+import db from '../utils/db.js';       // Knex
+import { sendMail } from '../utils/mailer.js'; // Nodemailer
+// ...
+await db.transaction(async (trx) => {
+  await trx('products').forUpdate().first();
+  await trx('bidding_history').insert({...});
+  await trx.raw(`INSERT INTO auto_bidding...`);
+});
+// Build & send email HTML inline (300 lines)
+    \end{verbatim}
+
+    \column{0.42\textwidth}
+    \normalsize
+    \textbf{Hậu quả:}
+    \begin{itemize}
+      \item Đổi Knex → Prisma: \textbf{phải sửa route}
+      \item Đổi Nodemailer → SendGrid: \textbf{phải sửa route}
+      \item Unit test \texttt{POST /bid}: cần \textbf{live PostgreSQL}
+      \item HTTP layer bị \textbf{coupled} với DB schema
+    \end{itemize}
+  \end{columns}
+\end{frame}
+
+% ----------------------------------------------------------
+% Combined Solution Slide
+% ----------------------------------------------------------
+\begin{frame}{Issues \#4, \#5, \#8 — Giải Pháp: 3-Layer Separation}
+  \textbf{Chiến lược:} Tách theo \textbf{trách nhiệm}, không phải theo feature. Giữ behavior hoàn toàn nguyên vẹn.
+
+  \begin{columns}[t]
+    \column{0.30\textwidth}
+    \textbf{\texttt{product.route.js}}\\
+    \small \textit{HTTP Layer}\\[6pt]
+    \begin{itemize}
+      \small
+      \item Parse request
+      \item Call service
+      \item Send response
+    \end{itemize}
+    \medskip
+    \textbf{22 dòng} (từ 430)
+
+    \column{0.38\textwidth}
+    \textbf{\texttt{auction.service.js}}\\
+    \small \textit{Orchestration Layer}\\[6pt]
+    \begin{itemize}
+      \small
+      \item Fetch pre-req data
+      \item Run bid-engine (pure)
+      \item DB transaction + writes
+      \item Fire-and-forget emails
+    \end{itemize}
+    \medskip
+    Owns all I/O
+
+    \column{0.30\textwidth}
+    \textbf{\texttt{bid-engine.js}}\\
+    \small \textit{Domain Layer}\\[6pt]
+    \begin{itemize}
+      \small
+      \item Validate eligibility
+      \item Validate amount
+      \item Auto-extend logic
+      \item \textbf{Proxy-bid algorithm}
+      \item Build message
+    \end{itemize}
+    \medskip
+    \textbf{Zero I/O — pure}
+  \end{columns}
+
+  \bigskip
+  \begin{center}
+    \textit{Route → Service → Engine → (DB, Mail). Mỗi tầng chỉ biết tầng ngay dưới nó.}
+  \end{center}
+\end{frame}
+
+% ----------------------------------------------------------
+% Summary Slide — Issues #4, #5, #8
+% ----------------------------------------------------------
+\begin{frame}{Tổng Kết Issues \#4, \#5, \#8 — Testability là Kết Quả}
+  \begin{block}{Nhận thức cốt lõi}
+    Testability là \emph{hệ quả tự nhiên} của đúng SRP. Khi mỗi function có một trách nhiệm duy nhất, nó tự nhiên trở nên unit-testable.
+  \end{block}
+
+  \medskip
+  \begin{columns}[t]
+    \column{0.50\textwidth}
+    \textbf{Trước refactor:}
+    \begin{itemize}
+      \item 0 pure function trong bidding flow
+      \item Unit test \texttt{POST /bid} cần live DB
+      \item Proxy-bid invariants: ẩn trong inline code
+      \item Thêm bid type: sửa 430-line handler
+    \end{itemize}
+
+    \column{0.48\textwidth}
+    \textbf{Sau refactor:}
+    \begin{itemize}
+      \item \textbf{6 pure functions} trong \texttt{bid-engine.js}
+      \item Unit test algorithm: mock object duy nhất
+      \item Invariants: documented + named
+      \item Thêm bid validation: sửa \texttt{bid-engine.js}
+    \end{itemize}
+  \end{columns}
+
+  \medskip
+  \begin{center}
+    \textit{``\texttt{product.route.js}: 1828 $\to$ \textbf{1283 dòng} ($-$30\%). Code ít đi là bằng chứng refactoring tốt.''}
+  \end{center}
+\end{frame}
+
 % ----------------------------------------------------------
 % Summary Slide — All Issues
 % ----------------------------------------------------------
