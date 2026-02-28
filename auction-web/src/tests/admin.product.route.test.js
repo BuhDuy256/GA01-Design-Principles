@@ -10,13 +10,15 @@ let mockSession = () => (req, res, next) => {
 const mockProductModel = {
   findAll: jest.fn().mockResolvedValue([]),
   findByProductIdForAdmin: jest.fn().mockResolvedValue({ id: 1 }),
-  addProduct: jest.fn().mockResolvedValue([{ id: 1 }]),
-  updateProductThumbnail: jest.fn(),
-  addProductImages: jest.fn(),
   updateProduct: jest.fn().mockResolvedValue(),
   deleteProduct: jest.fn().mockResolvedValue()
 };
 jest.unstable_mockModule("../models/product.model.js", () => mockProductModel);
+
+const mockAdminProductService = {
+  createProductWithImages: jest.fn().mockResolvedValue([1])
+};
+jest.unstable_mockModule("../services/admin.product.service.js", () => mockAdminProductService);
 
 const mockUserModel = {
   findUsersByRole: jest.fn().mockResolvedValue([{ id: 2, fullname: "Seller" }])
@@ -81,9 +83,7 @@ describe("Integration Tests: /admin/products/* (Flow 8)", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.location).toBe("/admin/products/list");
-    expect(mockProductModel.addProduct).toHaveBeenCalled();
-    expect(mockProductModel.updateProductThumbnail).toHaveBeenCalled();
-    expect(mockProductModel.addProductImages).toHaveBeenCalled();
+    expect(mockAdminProductService.createProductWithImages).toHaveBeenCalled();
   });
 
   test("IT-ADM-PRD-03: POST /edit updates a product", async () => {

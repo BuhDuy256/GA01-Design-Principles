@@ -1,19 +1,14 @@
 import express from 'express';
 import * as productModel from '../../models/product.model.js';
 import * as userModel from '../../models/user.model.js';
+import * as adminProductService from '../../services/admin.product.service.js';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 
 const router = express.Router();
 
 router.get('/list', async (req, res) => {
     const products = await productModel.findAll();
-    const success_message = req.session.success_message;
-    const error_message = req.session.error_message;
-    // Xóa message sau khi lấy ra
-    delete req.session.success_message;
-    delete req.session.error_message;
     const filteredProducts = products.map(p => ({
         id: p.id,
         name: p.name,
@@ -23,25 +18,25 @@ router.get('/list', async (req, res) => {
     }));
     res.render('vwAdmin/product/list', {
         products : filteredProducts,
-        empty: products.length === 0,
-        success_message,
-        error_message
+        empty: products.length === 0
     });
 });
 
-
-router.get('/add', async (req, res) => {
+// Middleware to load sellers for forms
+router.use(['/add', '/edit/:id'], async (req, res, next) => {
     try {
-        // Lấy danh sách sellers (users có role = 'seller')
-        const sellers = await userModel.findUsersByRole('seller');
-        res.render('vwAdmin/product/add', { sellers });
+        res.locals.sellers = await userModel.findUsersByRole('seller');
+        next();
     } catch (error) {
         console.error('Error loading sellers:', error);
-        res.render('vwAdmin/product/add', { 
-            sellers: [],
-            error_message: 'Failed to load sellers list'
-        });
+        res.locals.sellers = [];
+        req.session.error_message = 'Failed to load sellers list';
+        next();
     }
+});
+
+router.get('/add', async (req, res) => {
+    res.render('vwAdmin/product/add');
 });
 
 router.post('/add', async function (req, res) {
@@ -64,55 +59,22 @@ router.post('/add', async function (req, res) {
         closed_at: null,
         allow_unrated_bidder: product.allow_new_bidders === '1' ? true : false
     }
-    // console.log('productData:', productData);
-    const returnedID = await productModel.addProduct(productData);
-
-    const dirPath = path.join('public', 'images', 'products').replace(/\\/g, "/");
-
     const imgs = JSON.parse(product.imgs_list);
 
-    // Move and rename thumbnail
-    const mainPath = path.join(dirPath, `p${returnedID[0].id}_thumb.jpg`).replace(/\\/g, "/");
-    const oldMainPath = path.join('public', 'uploads', path.basename(product.thumbnail)).replace(/\\/g, "/");
-    const savedMainPath = '/' + path.join('images', 'products', `p${returnedID[0].id}_thumb.jpg`).replace(/\\/g, "/");
-    fs.renameSync(oldMainPath, mainPath);
-    await productModel.updateProductThumbnail(returnedID[0].id, savedMainPath);
-
-    // Move and rename subimages 
-    let i = 1;
-    let newImgPaths = [];
-    for (const imgPath of imgs) {
-        const oldPath = path.join('public', 'uploads', path.basename(imgPath)).replace(/\\/g, "/");
-        const newPath = path.join(dirPath, `p${returnedID[0].id}_${i}.jpg`).replace(/\\/g, "/");
-        const savedPath = '/' + path.join('images', 'products', `p${returnedID[0].id}_${i}.jpg`).replace(/\\/g, "/");
-        fs.renameSync(oldPath, newPath);
-        newImgPaths.push({
-            product_id: returnedID[0].id,
-            img_link: savedPath
-        });
-        i++;
-    }
-    await productModel.addProductImages(newImgPaths);
+    await adminProductService.createProductWithImages(productData, product.thumbnail, imgs);
     res.redirect('/admin/products/list');
 });
 router.get('/detail/:id', async (req, res) => {
     const id = req.params.id;
     const product = await productModel.findByProductIdForAdmin(id);
     // console.log(product);
-    const success_message = req.session.success_message;
-    const error_message = req.session.error_message;
-    delete req.session.success_message;
-    delete req.session.error_message
     res.render('vwAdmin/product/detail', { product } );
 });
 
 router.get('/edit/:id', async (req, res) => {
     const id = req.params.id;
     const product = await productModel.findByProductIdForAdmin(id);
-    // console.log(product)
-    const sellers = await userModel.findUsersByRole('seller');
-    // console.log(product);
-    res.render('vwAdmin/product/edit', { product, sellers } );
+    res.render('vwAdmin/product/edit', { product } );
 });
 
 router.post('/edit', async (req, res) => {

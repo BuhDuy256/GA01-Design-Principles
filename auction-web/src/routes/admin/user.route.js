@@ -2,23 +2,17 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import * as upgradeRequestModel from '../../models/upgradeRequest.model.js';
 import * as userModel from '../../models/user.model.js';
+import * as adminUserService from '../../services/admin.user.service.js';
 import { sendMail } from '../../utils/mailer.js';
 const router = express.Router();
 
 
 router.get('/list', async (req, res) => {
     const users = await userModel.loadAllUsers();
-    const success_message = req.session.success_message;
-    const error_message = req.session.error_message;
-    
-    delete req.session.success_message;
-    delete req.session.error_message;
     
     res.render('vwAdmin/users/list', { 
         users,
-        empty: users.length === 0,
-        success_message,
-        error_message
+        empty: users.length === 0
     });
 });
 
@@ -59,11 +53,8 @@ router.post('/add', async (req, res) => {
 router.get('/edit/:id', async (req, res) => {
     const id = req.params.id;
     const user = await userModel.findById(id);
-    const error_message = req.session.error_message;
     
-    delete req.session.error_message;
-    
-    res.render('vwAdmin/users/edit', { user, error_message });
+    res.render('vwAdmin/users/edit', { user });
 });
 
 router.post('/edit', async (req, res) => {
@@ -93,45 +84,7 @@ router.post('/edit', async (req, res) => {
 router.post('/reset-password', async (req, res) => {
     try {
         const { id } = req.body;
-        const defaultPassword = '123';
-        const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-        
-        // Get user info to send email
-        const user = await userModel.findById(id);
-        
-        await userModel.update(id, { 
-            password_hash: hashedPassword,
-            updated_at: new Date()
-        });
-        
-        // Send email notification to user
-        if (user && user.email) {
-            try {
-                await sendMail({
-                    to: user.email,
-                    subject: 'Your Password Has Been Reset - Online Auction',
-                    html: `
-                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                            <h2 style="color: #333;">Password Reset Notification</h2>
-                            <p>Dear <strong>${user.fullname}</strong>,</p>
-                            <p>Your account password has been reset by an administrator.</p>
-                            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                                <p style="margin: 0;"><strong>Your new temporary password:</strong></p>
-                                <p style="font-size: 24px; color: #e74c3c; margin: 10px 0; font-weight: bold;">${defaultPassword}</p>
-                            </div>
-                            <p style="color: #e74c3c;"><strong>Important:</strong> Please log in and change your password immediately for security purposes.</p>
-                            <p>If you did not request this password reset, please contact our support team immediately.</p>
-                            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                            <p style="color: #888; font-size: 12px;">This is an automated message from Online Auction. Please do not reply to this email.</p>
-                        </div>
-                    `
-                });
-                console.log(`Password reset email sent to ${user.email}`);
-            } catch (emailError) {
-                console.error('Failed to send password reset email:', emailError);
-                // Continue even if email fails - password is still reset
-            }
-        }
+        const user = await adminUserService.resetUserPassword(id);
         
         req.session.success_message = `Password of ${user.fullname} reset successfully to default: 123`;
         res.redirect(`/admin/users/list`);

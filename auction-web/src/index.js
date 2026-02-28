@@ -297,7 +297,20 @@ const fileFilter = (req, file, cb) => {
 // 3. MIDDLEWARE TOÀN CỤC (Chạy cho mọi request)
 // ============================================================
 
-// 3.1. Middleware User Info
+// 3.1. Middleware Flash Messages
+app.use(function (req, res, next) {
+  if (req.session.success_message) {
+    res.locals.success_message = req.session.success_message;
+    delete req.session.success_message;
+  }
+  if (req.session.error_message) {
+    res.locals.error_message = req.session.error_message;
+    delete req.session.error_message;
+  }
+  next();
+});
+
+// 3.2. Middleware User Info
 app.use(async function (req, res, next) {
   if (typeof req.session.isAuthenticated === 'undefined') {
     req.session.isAuthenticated = false;

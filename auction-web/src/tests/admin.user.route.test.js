@@ -39,6 +39,11 @@ const mockMailer = {
 };
 jest.unstable_mockModule("../utils/mailer.js", () => mockMailer);
 
+const mockAdminUserService = {
+  resetUserPassword: jest.fn().mockResolvedValue({ id: 1, fullname: "Test" })
+};
+jest.unstable_mockModule("../services/admin.user.service.js", () => mockAdminUserService);
+
 // Load App
 const adminUserRouter = (await import("../routes/admin/user.route.js")).default;
 const adminUpgradeRouter = (await import("../routes/admin/upgrade.route.js")).default;
@@ -128,15 +133,13 @@ describe("Integration Tests: /admin/users/* (Admin CRUD - Flow 8)", () => {
   });
 
   test("IT-ADM-USR-04: POST /reset-password resets password and sends email", async () => {
-    mockUserModel.findById.mockResolvedValueOnce({ id: 1, email: "test@example.com", fullname: "Test" });
-    mockUserModel.update.mockResolvedValueOnce();
+    mockAdminUserService.resetUserPassword.mockResolvedValueOnce({ id: 1, fullname: "Test" });
 
     const response = await request(app).post("/admin/users/reset-password").send({ id: 1 });
 
     expect(response.status).toBe(302);
     expect(response.headers.location).toBe("/admin/users/list");
-    expect(mockUserModel.update).toHaveBeenCalled();
-    expect(mockMailer.sendMail).toHaveBeenCalled();
+    expect(mockAdminUserService.resetUserPassword).toHaveBeenCalledWith(1);
   });
 
   test("IT-ADM-USR-05: POST /delete removes a user", async () => {
