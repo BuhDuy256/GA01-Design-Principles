@@ -1,7 +1,9 @@
 import * as reviewModel from '../models/review.model.js';
 import * as orderModel from '../models/order.model.js';
 import * as productModel from '../models/product.model.js';
-
+import * as invoiceModel from '../models/invoice.model.js';
+import * as orderChatModel from '../models/orderChat.model.js';
+import {parsePostgresArray} from '../utils/dbHelpers.js';
 
 const checkAndCompleteOrder = async (order, userId) => {
     
@@ -99,3 +101,96 @@ export const sendMessage = async (orderId, userId, message) => {
           message
         });
 }
+
+
+export const getProductStatus = (product) => {
+    const now = new Date();
+    const endDate = new Date(product.end_at);
+    
+    if (product.is_sold === true) return 'SOLD';
+    if (product.is_sold === false) return 'CANCELLED';
+    if ((endDate <= now || product.closed_at) && product.highest_bidder_id) return 'PENDING';
+    if (endDate <= now && !product.highest_bidder_id) return 'EXPIRED';
+    
+    return 'ACTIVE';
+};
+
+export const getOrCreateOrder = async (product) => {
+    let order = await orderModel.findByProductId(product.id);
+    
+    // Fallback: Auto-create order if not exists
+    if (!order && product.highest_bidder_id) {
+        const orderData = {
+            product_id: product.id,
+            buyer_id: product.highest_bidder_id,
+            seller_id: product.seller_id,
+            final_price: product.current_price || product.highest_bid || 0
+        };
+        await orderModel.createOrder(orderData);
+        order = await orderModel.findByProductId(product.id);
+    }
+    
+    return order;
+};
+
+
+export const buildCompleteOrderPageData = async (productId, userId) => {
+    // Take productId and userId, return all data needed for rendering complete order page
+    const product = await productModel.findByProductId2(productId, userId);
+    if (!product) {
+        const error = new Error('Product not found');
+        error.code = 'PRODUCT_NOT_FOUND';
+        throw error;
+    }
+
+    // Check product status
+    const productStatus = getProductStatus(product);
+    if (productStatus !== 'PENDING') {
+        const error = new Error('Product is not in pending status');
+        error.code = 'NOT_PENDING';
+        throw error;
+    }
+
+    // Check if user is authorized to view this page (seller or highest bidder)
+    const isSeller = product.seller_id === userId;
+    const isHighestBidder = product.highest_bidder_id === userId;
+    
+    if (!isSeller && !isHighestBidder) {
+        const error = new Error('Permission denied');
+        error.code = 'FORBIDDEN';
+        throw error;
+    }
+
+    // Ensure order exists (idempotent)
+    const order = await getOrCreateOrder(product);
+
+    // Parallel fetching of invoices and messages to optimize performance
+    const [rawPaymentInvoice, rawShippingInvoice, messages] = await Promise.all([
+        invoiceModel.getPaymentInvoice(order.id),
+        invoiceModel.getShippingInvoice(order.id),
+        orderChatModel.getMessagesByOrderId(order.id)
+    ]);
+
+    // Transform data (e.g. parse Postgres array fields) before returning to Controller
+    const paymentInvoice = rawPaymentInvoice ? {
+        ...rawPaymentInvoice,
+        payment_proof_urls: parsePostgresArray(rawPaymentInvoice.payment_proof_urls)
+    } : null;
+
+    const shippingInvoice = rawShippingInvoice ? {
+        ...rawShippingInvoice,
+        shipping_proof_urls: parsePostgresArray(rawShippingInvoice.shipping_proof_urls)
+    } : null;
+
+
+    return {
+        product,
+        order,
+        paymentInvoice,
+        shippingInvoice,
+        messages,
+        isSeller,
+        isHighestBidder,
+        currentUserId: userId
+    };
+};

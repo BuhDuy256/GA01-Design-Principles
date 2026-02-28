@@ -7,17 +7,15 @@ import * as biddingHistoryModel from '../models/biddingHistory.model.js';
 import * as productCommentModel from '../models/productComment.model.js';
 import * as categoryModel from '../models/category.model.js';
 import * as productDescUpdateModel from '../models/productDescriptionUpdate.model.js';
-import * as autoBiddingModel from '../models/autoBidding.model.js';
 import * as systemSettingModel from '../models/systemSetting.model.js';
 import * as rejectedBidderModel from '../models/rejectedBidder.model.js';
-import * as orderModel from '../models/order.model.js';
 import * as invoiceModel from '../models/invoice.model.js';
 import * as orderChatModel from '../models/orderChat.model.js';
 import { isAuthenticated } from '../middlewares/auth.mdw.js';
 import { sendMail } from '../utils/mailer.js';
 import db from '../utils/db.js';
-import multer from 'multer';
-import path from 'path';
+import { parsePostgresArray } from '../utils/dbHelpers.js';
+import * as orderService from '../services/order.service.js';
 const router = express.Router();
 
 const prepareProductList = async (products) => {
@@ -789,107 +787,36 @@ router.post('/bid', isAuthenticated, async (req, res) => {
 
 
 // ROUTE: COMPLETE ORDER PAGE (For PENDING products)
+
 router.get('/complete-order', isAuthenticated, async (req, res) => {
-  const userId = req.session.authUser.id;
-  const productId = req.query.id;
-  
-  if (!productId) {
-    return res.redirect('/');
-  }
-  
-  const product = await productModel.findByProductId2(productId, userId);
-  
-  if (!product) {
-    return res.status(404).render('404', { message: 'Product not found' });
-  }
-  
-  // Determine product status
-  const now = new Date();
-  const endDate = new Date(product.end_at);
-  let productStatus = 'ACTIVE';
-  
-  if (product.is_sold === true) {
-    productStatus = 'SOLD';
-  } else if (product.is_sold === false) {
-    productStatus = 'CANCELLED';
-  } else if ((endDate <= now || product.closed_at) && product.highest_bidder_id) {
-    productStatus = 'PENDING';
-  } else if (endDate <= now && !product.highest_bidder_id) {
-    productStatus = 'EXPIRED';
-  }
-  
-  // Only PENDING products can access this page
-  if (productStatus !== 'PENDING') {
-    return res.redirect(`/products/detail?id=${productId}`);
-  }
-  
-  // Only seller or highest bidder can access
-  const isSeller = product.seller_id === userId;
-  const isHighestBidder = product.highest_bidder_id === userId;
-  
-  if (!isSeller && !isHighestBidder) {
-    return res.status(403).render('403', { message: 'You do not have permission to access this page' });
-  }
-  
-  // Fetch or create order
-  let order = await orderModel.findByProductId(productId);
-  
-  if (!order) {
-    // Auto-create order if not exists (trigger should handle this, but fallback)
-    const orderData = {
-      product_id: productId,
-      buyer_id: product.highest_bidder_id,
-      seller_id: product.seller_id,
-      final_price: product.current_price || product.highest_bid || 0
-    };
-    await orderModel.createOrder(orderData);
-    order = await orderModel.findByProductId(productId);
-  }
-  
-  // Fetch invoices
-  let paymentInvoice = await invoiceModel.getPaymentInvoice(order.id);
-  let shippingInvoice = await invoiceModel.getShippingInvoice(order.id);
-  
-  // Parse PostgreSQL arrays to JavaScript arrays
-  if (paymentInvoice && paymentInvoice.payment_proof_urls) {
-    console.log('Original payment_proof_urls:', paymentInvoice.payment_proof_urls);
-    console.log('Type:', typeof paymentInvoice.payment_proof_urls);
-    
-    if (typeof paymentInvoice.payment_proof_urls === 'string') {
-      // PostgreSQL returns array as string like: {url1,url2,url3}
-      paymentInvoice.payment_proof_urls = paymentInvoice.payment_proof_urls
-        .replace(/^\{/, '')
-        .replace(/\}$/, '')
-        .split(',')
-        .filter(url => url);
-      console.log('Parsed payment_proof_urls:', paymentInvoice.payment_proof_urls);
+    try {
+        const userId = req.session.authUser.id;
+        const productId = req.query.id;
+        
+        if (!productId) return res.redirect('/');
+        
+        // Build complete order page data (includes product, payment info, etc.)
+        const viewData = await orderService.buildCompleteOrderPageData(productId, userId);
+        
+        // Render View
+        res.render('vwProduct/complete-order', viewData);
+
+    } catch (error) {
+        switch (error.code) {
+            case 'PRODUCT_NOT_FOUND':
+                return res.status(404).render('404', { message: 'Product not found' });
+            case 'NOT_PENDING':
+                return res.redirect(`/products/detail?id=${req.query.id}`);
+            case 'FORBIDDEN':
+                return res.status(403).render('403', { message: 'You do not have permission to access this page' });
+            default:
+                console.error('Complete order page error:', error);
+                return res.status(500).render('500', { message: 'Server Error' });
+        }
     }
-  }
-  
-  if (shippingInvoice && shippingInvoice.shipping_proof_urls) {
-    if (typeof shippingInvoice.shipping_proof_urls === 'string') {
-      shippingInvoice.shipping_proof_urls = shippingInvoice.shipping_proof_urls
-        .replace(/^\{/, '')
-        .replace(/\}$/, '')
-        .split(',')
-        .filter(url => url);
-    }
-  }
-  
-  // Fetch chat messages
-  const messages = await orderChatModel.getMessagesByOrderId(order.id);
-  
-  res.render('vwProduct/complete-order', {
-    product,
-    order,
-    paymentInvoice,
-    shippingInvoice,
-    messages,
-    isSeller,
-    isHighestBidder,
-    currentUserId: userId
-  });
 });
+
+
 
 // ROUTE: POST COMMENT
 router.post('/comment', isAuthenticated, async (req, res) => {
