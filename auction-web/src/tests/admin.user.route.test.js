@@ -60,7 +60,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use("/admin/users/upgrade", adminUpgradeRouter);
+app.use("/admin/users", adminUpgradeRouter);
 app.use("/admin/users", adminUserRouter);
 
 describe("Integration Tests: /admin/users/upgrade/*", () => {
@@ -72,7 +72,7 @@ describe("Integration Tests: /admin/users/upgrade/*", () => {
     const mockList = [{ id: 1, bidder_id: 2, status: 'pending' }];
     mockUpgradeModel.loadAllUpgradeRequests.mockResolvedValueOnce(mockList);
 
-    const response = await request(app).get("/admin/users/upgrade/upgrade-requests");
+    const response = await request(app).get("/admin/users/upgrade-requests");
     expect(response.status).toBe(200);
     expect(response.body.view).toBe("vwAdmin/users/upgradeRequests");
     expect(response.body.options.requests).toEqual(mockList);
@@ -82,7 +82,7 @@ describe("Integration Tests: /admin/users/upgrade/*", () => {
     mockUpgradeModel.approveUpgradeRequest.mockResolvedValueOnce(1);
     mockUserModel.updateUserRoleToSeller.mockResolvedValueOnce(1);
 
-    const response = await request(app).post("/admin/users/upgrade/upgrade/approve").send({
+    const response = await request(app).post("/admin/users/upgrade/approve").send({
       id: 99,
       bidder_id: 2
     });
@@ -95,7 +95,7 @@ describe("Integration Tests: /admin/users/upgrade/*", () => {
   test("IT-ADM-03: POST /upgrade/reject marks request as rejected", async () => {
     mockUpgradeModel.rejectUpgradeRequest.mockResolvedValueOnce(1);
 
-    const response = await request(app).post("/admin/users/upgrade/upgrade/reject").send({
+    const response = await request(app).post("/admin/users/upgrade/reject").send({
       id: 99,
       admin_note: "not qualified"
     });

@@ -389,7 +389,7 @@ app.use('/admin', function (req, res, next) {
 
 // Các Route Admin
 app.use('/admin/account', adminAccountRouter);
-app.use('/admin/users/upgrade', adminUpgradeRouter);
+app.use('/admin/users', adminUpgradeRouter);
 app.use('/admin/users', adminUserRouter);
 app.use('/admin/categories', adminCategoryRouter);
 app.use('/admin/products', adminProductRouter);
