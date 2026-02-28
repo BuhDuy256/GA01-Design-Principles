@@ -15,6 +15,7 @@ import { resolveAuctionStatus } from '../services/auction/auction-state.js';
 import * as auctionService from '../services/auction/auction.service.js';
 import { buildBidResponseMessage } from '../services/auction/bid-engine.js';
 import { sendMail } from '../utils/mailer.js';
+import * as notificationService from '../services/notification.service.js';
 import db from '../utils/db.js';
 const router = express.Router();
 
@@ -343,118 +344,31 @@ router.post('/comment', isAuthenticated, async (req, res) => {
       return res.redirect(`/products/detail?id=${productId}`);
     }
 
-    // Create comment
+    // Persist the comment
     await productCommentModel.createComment(productId, userId, content.trim(), parentId || null);
 
-    // Get product and users for email notification
-    const product = await productModel.findByProductId2(productId, null);
-    const commenter = await userModel.findById(userId);
+    // Fetch data required by notification service
+    const [product, commenter] = await Promise.all([
+      productModel.findByProductId2(productId, null),
+      userModel.findById(userId)
+    ]);
     const seller = await userModel.findById(product.seller_id);
     const productUrl = `${req.protocol}://${req.get('host')}/products/detail?id=${productId}`;
 
-    // Check if the commenter is the seller (seller is replying)
+    // Fetch bidders + commenters only when the seller is broadcasting a reply
     const isSellerReplying = userId === product.seller_id;
-
+    let bidders = [], commenters = [];
     if (isSellerReplying && parentId) {
-      // Seller is replying to a question - notify all bidders and commenters
-      const bidders = await biddingHistoryModel.getUniqueBidders(productId);
-      const commenters = await productCommentModel.getUniqueCommenters(productId);
-
-      // Combine and remove duplicates (exclude seller)
-      const recipientsMap = new Map();
-
-      bidders.forEach(b => {
-        if (b.id !== product.seller_id && b.email) {
-          recipientsMap.set(b.id, { email: b.email, fullname: b.fullname });
-        }
-      });
-
-      commenters.forEach(c => {
-        if (c.id !== product.seller_id && c.email) {
-          recipientsMap.set(c.id, { email: c.email, fullname: c.fullname });
-        }
-      });
-
-      // Send email to each recipient
-      for (const [recipientId, recipient] of recipientsMap) {
-        try {
-          await sendMail({
-            to: recipient.email,
-            subject: `Seller answered a question on: ${product.name}`,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #667eea;">Seller Response on Product</h2>
-                <p>Dear <strong>${recipient.fullname}</strong>,</p>
-                <p>The seller has responded to a question on a product you're interested in:</p>
-                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                  <p><strong>Product:</strong> ${product.name}</p>
-                  <p><strong>Seller:</strong> ${seller.fullname}</p>
-                  <p><strong>Answer:</strong></p>
-                  <p style="background-color: white; padding: 15px; border-radius: 5px; border-left: 4px solid #667eea;">${content}</p>
-                </div>
-                <div style="text-align: center; margin: 30px 0;">
-                  <a href="${productUrl}" style="display: inline-block; background-color: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                    View Product
-                  </a>
-                </div>
-                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                <p style="color: #888; font-size: 12px;">This is an automated message from Online Auction. Please do not reply to this email.</p>
-              </div>
-            `
-          });
-        } catch (emailError) {
-          console.error(`Failed to send email to ${recipient.email}:`, emailError);
-        }
-      }
-      console.log(`Seller reply notification sent to ${recipientsMap.size} recipients`);
-    } else if (seller && seller.email && userId !== product.seller_id) {
-      // Non-seller commenting - send email to seller
-      if (parentId) {
-        // This is a reply - send "New Reply" email
-        await sendMail({
-          to: seller.email,
-          subject: `New reply on your product: ${product.name}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #667eea;">New Reply on Your Product</h2>
-              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                <p><strong>Product:</strong> ${product.name}</p>
-                <p><strong>From:</strong> ${commenter.fullname}</p>
-                <p><strong>Reply:</strong></p>
-                <p style="background-color: white; padding: 15px; border-radius: 5px;">${content}</p>
-              </div>
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${productUrl}" style="display: inline-block; background-color: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                  View Product & Reply
-                </a>
-              </div>
-            </div>
-          `
-        });
-      } else {
-        // This is a new question - send "New Question" email
-        await sendMail({
-          to: seller.email,
-          subject: `New question about your product: ${product.name}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #667eea;">New Question About Your Product</h2>
-              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                <p><strong>Product:</strong> ${product.name}</p>
-                <p><strong>From:</strong> ${commenter.fullname}</p>
-                <p><strong>Question:</strong></p>
-                <p style="background-color: white; padding: 15px; border-radius: 5px;">${content}</p>
-              </div>
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${productUrl}" style="display: inline-block; background-color: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                  View Product & Answer
-                </a>
-              </div>
-            </div>
-          `
-        });
-      }
+      [bidders, commenters] = await Promise.all([
+        biddingHistoryModel.getUniqueBidders(productId),
+        productCommentModel.getUniqueCommenters(productId)
+      ]);
     }
+
+    // Fire-and-forget: delegate all email logic to notification service
+    notificationService.sendCommentNotifications({
+      product, commenter, seller, content: content.trim(), parentId, userId, productUrl, bidders, commenters
+    });
 
     req.session.success_message = 'Comment posted successfully!';
     res.redirect(`/products/detail?id=${productId}`);

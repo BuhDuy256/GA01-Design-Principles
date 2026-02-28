@@ -334,3 +334,151 @@ function _sendExpiredAuctionEmail({ auction }) {
     })
   });
 }
+
+// ---------------------------------------------------------------------------
+// COMMENT NOTIFICATIONS
+// Called fire-and-forget by the POST /comment route after a comment is saved.
+//
+// Three cases:
+//   1. Seller is replying to a question  → notify all interested bidders and commenters
+//   2. Non-seller is replying to a thread → notify the seller ("new reply")
+//   3. Non-seller is asking a new question → notify the seller ("new question")
+// ---------------------------------------------------------------------------
+
+/**
+ * Dispatch comment-related email notifications.
+ *
+ * The caller is responsible for pre-fetching product, commenter, and seller
+ * before calling this function. This service owns only the email routing
+ * decision and template construction.
+ *
+ * @param {{
+ *   product: object,          — full product row (needs .name, .seller_id)
+ *   commenter: object,        — user who posted the comment (needs .fullname)
+ *   seller: object|null,      — product seller (needs .email, .fullname)
+ *   content: string,          — comment text
+ *   parentId: number|null,    — parent comment id (null = top-level question)
+ *   userId: number,           — id of the commenter
+ *   productUrl: string,       — absolute URL to the product page
+ *   bidders: object[],        — array of {id, email, fullname} (for seller-reply case)
+ *   commenters: object[],     — array of {id, email, fullname} (for seller-reply case)
+ * }}
+ */
+export async function sendCommentNotifications({
+  product, commenter, seller, content, parentId, userId, productUrl,
+  bidders = [], commenters = []
+}) {
+  try {
+    const isSellerReplying = userId === product.seller_id;
+
+    if (isSellerReplying && parentId) {
+      // Case 1: Seller answered a question — notify all interested parties
+      await _notifyInterestedParties({
+        product, seller, content, productUrl,
+        bidders, commenters
+      });
+    } else if (seller && seller.email && userId !== product.seller_id) {
+      // Cases 2 & 3: Buyer/bidder activity — notify the seller
+      if (parentId) {
+        await _sendReplyNotificationToSeller({ product, commenter, seller, content, productUrl });
+      } else {
+        await _sendQuestionNotificationToSeller({ product, commenter, seller, content, productUrl });
+      }
+    }
+  } catch (emailError) {
+    console.error('Failed to send comment notification emails:', emailError);
+  }
+}
+
+/**
+ * Notify all bidders and commenters (deduped, excluding seller) when the
+ * seller posts a reply.
+ */
+async function _notifyInterestedParties({ product, seller, content, productUrl, bidders, commenters }) {
+  const recipientsMap = new Map();
+
+  bidders.forEach(b => {
+    if (b.id !== product.seller_id && b.email) {
+      recipientsMap.set(b.id, { email: b.email, fullname: b.fullname });
+    }
+  });
+  commenters.forEach(c => {
+    if (c.id !== product.seller_id && c.email) {
+      recipientsMap.set(c.id, { email: c.email, fullname: c.fullname });
+    }
+  });
+
+  const sends = [];
+  for (const recipient of recipientsMap.values()) {
+    const bodyHtml = `
+      <p>Dear <strong>${recipient.fullname}</strong>,</p>
+      <p>The seller has responded to a question on a product you're interested in:</p>
+      <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #667eea;">
+        <p><strong>Product:</strong> ${product.name}</p>
+        <p><strong>Seller:</strong> ${seller.fullname}</p>
+        <p><strong>Answer:</strong></p>
+        <p style="padding: 12px; border-radius: 5px; background: #f8f9fa;">${content}</p>
+      </div>
+      ${buildCtaButton({ href: productUrl, label: 'View Product', color1: '#667eea', color2: '#764ba2' })}
+    `;
+    sends.push(sendMail({
+      to: recipient.email,
+      subject: `Seller answered a question on: ${product.name}`,
+      html: buildEmailLayout({
+        headerGradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        title: 'Seller Response',
+        bodyHtml
+      })
+    }).catch(err => console.error(`Failed to send to ${recipient.email}:`, err)));
+  }
+
+  await Promise.all(sends);
+  console.log(`Seller reply notification sent to ${recipientsMap.size} recipients`);
+}
+
+function _sendReplyNotificationToSeller({ product, commenter, seller, content, productUrl }) {
+  const bodyHtml = `
+    <p>Dear <strong>${seller.fullname}</strong>,</p>
+    <p>A user has replied to a comment thread on your product:</p>
+    <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #667eea;">
+      <p><strong>Product:</strong> ${product.name}</p>
+      <p><strong>From:</strong> ${commenter.fullname}</p>
+      <p><strong>Reply:</strong></p>
+      <p style="padding: 12px; border-radius: 5px; background: #f8f9fa;">${content}</p>
+    </div>
+    ${buildCtaButton({ href: productUrl, label: 'View Product & Reply', color1: '#667eea', color2: '#764ba2' })}
+  `;
+  return sendMail({
+    to: seller.email,
+    subject: `New reply on your product: ${product.name}`,
+    html: buildEmailLayout({
+      headerGradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      title: 'New Reply',
+      bodyHtml
+    })
+  });
+}
+
+function _sendQuestionNotificationToSeller({ product, commenter, seller, content, productUrl }) {
+  const bodyHtml = `
+    <p>Dear <strong>${seller.fullname}</strong>,</p>
+    <p>A user has asked a question about your product:</p>
+    <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #667eea;">
+      <p><strong>Product:</strong> ${product.name}</p>
+      <p><strong>From:</strong> ${commenter.fullname}</p>
+      <p><strong>Question:</strong></p>
+      <p style="padding: 12px; border-radius: 5px; background: #f8f9fa;">${content}</p>
+    </div>
+    ${buildCtaButton({ href: productUrl, label: 'View Product & Answer', color1: '#667eea', color2: '#764ba2' })}
+  `;
+  return sendMail({
+    to: seller.email,
+    subject: `New question about your product: ${product.name}`,
+    html: buildEmailLayout({
+      headerGradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      title: 'New Question',
+      bodyHtml
+    })
+  });
+}
+

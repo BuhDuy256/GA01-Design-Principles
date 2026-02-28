@@ -3,11 +3,9 @@ import * as productModel from '../models/product.model.js';
 import * as orderModel from '../models/order.model.js';
 import * as invoiceModel from '../models/invoice.model.js';
 import * as orderChatModel from '../models/orderChat.model.js';
-import * as reviewModel from '../models/review.model.js';
 import { isAuthenticated } from '../middlewares/auth.mdw.js';
 import { resolveAuctionStatus } from '../services/auction/auction-state.js';
 import * as orderService from '../services/order.service.js';
-import db from '../utils/db.js';
 import multer from 'multer';
 import path from 'path';
 
@@ -276,115 +274,31 @@ router.post('/order/:orderId/confirm-delivery', isAuthenticated, async (req, res
 // Submit rating (Both)
 router.post('/order/:orderId/submit-rating', isAuthenticated, async (req, res) => {
   try {
-    const orderId = req.params.orderId;
-    const userId = req.session.authUser.id;
     const { rating, comment } = req.body;
-
-    // Verify user is buyer or seller
-    const order = await orderModel.findById(orderId);
-    if (!order || (order.buyer_id !== userId && order.seller_id !== userId)) {
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
-
-    // Determine who is being rated
-    const isBuyer = order.buyer_id === userId;
-    const reviewerId = userId;
-    const revieweeId = isBuyer ? order.seller_id : order.buyer_id;
-
-    // Convert rating to number (positive = 1, negative = -1)
-    const ratingValue = rating === 'positive' ? 1 : -1;
-
-    // Check if already rated
-    const existingReview = await reviewModel.findByReviewerAndProduct(reviewerId, order.product_id);
-
-    if (existingReview) {
-      // Update existing review
-      await reviewModel.updateReview(reviewerId, order.product_id, {
-        rating: ratingValue,
-        comment: comment || null
-      });
-    } else {
-      // Create new review
-      await reviewModel.createReview({
-        reviewerId,
-        revieweeId,
-        productId: order.product_id,
-        rating: ratingValue,
-        comment: comment || null
-      });
-    }
-
-    // Check if both parties have completed (rated or skipped)
-    const buyerReview = await reviewModel.getProductReview(order.buyer_id, order.seller_id, order.product_id);
-    const sellerReview = await reviewModel.getProductReview(order.seller_id, order.buyer_id, order.product_id);
-
-    if (buyerReview && sellerReview) {
-      // Both completed, mark order as completed
-      await orderModel.updateStatus(orderId, 'completed', userId);
-
-      // Update product as sold and set closed_at to payment completion time
-      await db('products').where('id', order.product_id).update({
-        is_sold: true,
-        closed_at: new Date()
-      });
-    }
-
-    res.json({ success: true, message: 'Rating submitted successfully' });
+    const result = await orderService.submitRating({
+      orderId: req.params.orderId,
+      userId: req.session.authUser.id,
+      rating,
+      comment
+    });
+    res.json(result);
   } catch (error) {
-    console.error('Submit rating error:', error);
-    res.status(500).json({ error: error.message || 'Failed to submit rating' });
+    const status = error.status || 500;
+    res.status(status).json({ error: error.message || 'Failed to submit rating' });
   }
 });
 
 // Complete transaction without rating (skip)
 router.post('/order/:orderId/complete-transaction', isAuthenticated, async (req, res) => {
   try {
-    const orderId = req.params.orderId;
-    const userId = req.session.authUser.id;
-
-    // Verify user is buyer or seller
-    const order = await orderModel.findById(orderId);
-    if (!order || (order.buyer_id !== userId && order.seller_id !== userId)) {
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
-
-    // Determine who is being rated
-    const isBuyer = order.buyer_id === userId;
-    const reviewerId = userId;
-    const revieweeId = isBuyer ? order.seller_id : order.buyer_id;
-
-    // Create review record with rating=0 to indicate "skipped"
-    const existingReview = await reviewModel.findByReviewerAndProduct(reviewerId, order.product_id);
-
-    if (!existingReview) {
-      await reviewModel.createReview({
-        reviewerId,
-        revieweeId,
-        productId: order.product_id,
-        rating: 0, // 0 means skipped
-        comment: null
-      });
-    }
-
-    // Check if both parties have completed (rated or skipped)
-    const buyerReview = await reviewModel.getProductReview(order.buyer_id, order.seller_id, order.product_id);
-    const sellerReview = await reviewModel.getProductReview(order.seller_id, order.buyer_id, order.product_id);
-
-    if (buyerReview && sellerReview) {
-      // Both completed, mark order as completed
-      await orderModel.updateStatus(orderId, 'completed', userId);
-
-      // Update product as sold and set closed_at to payment completion time
-      await db('products').where('id', order.product_id).update({
-        is_sold: true,
-        closed_at: new Date()
-      });
-    }
-
-    res.json({ success: true, message: 'Transaction completed' });
+    const result = await orderService.completeTransaction({
+      orderId: req.params.orderId,
+      userId: req.session.authUser.id
+    });
+    res.json(result);
   } catch (error) {
-    console.error('Complete transaction error:', error);
-    res.status(500).json({ error: error.message || 'Failed to complete transaction' });
+    const status = error.status || 500;
+    res.status(status).json({ error: error.message || 'Failed to complete transaction' });
   }
 });
 
