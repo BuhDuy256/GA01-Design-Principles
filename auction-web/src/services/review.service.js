@@ -61,3 +61,15 @@ export const upsertProductRating = async (sellerId, productId, bidderId, rating,
         return 'CREATED';
     }
 };
+
+// Create negative review when auction is cancelled with a bidder
+export async function createNegativeReview(sellerId, bidderId, productId, reason) {
+    const reviewData = {
+        reviewer_id: sellerId,
+        reviewee_id: bidderId,
+        product_id: productId,
+        rating: -1,
+        comment: reason || 'Auction cancelled by seller'
+    };
+    await reviewModel.createReview(reviewData);
+}

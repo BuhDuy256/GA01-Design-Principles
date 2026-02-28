@@ -1,7 +1,4 @@
 import express from 'express';
-import * as productModel from '../models/product.model.js';
-import * as reviewModel from '../models/review.model.js';
-import * as productDescUpdateModel from '../models/productDescriptionUpdate.model.js';
 import { upload } from '../utils/upload.js';
 import * as notificationService from '../services/notification.service.js';
 import * as productService from '../services/product.service.js';
@@ -10,21 +7,21 @@ const router = express.Router();
 
 router.get('/', async function (req, res) {
     const sellerId = req.session.authUser.id;
-    const stats = await productModel.getSellerStats(sellerId);
+    const stats = await productService.getSellerStats(sellerId);
     res.render('vwSeller/dashboard', { stats });
 });
 
 // All Products - View only
 router.get('/products', async function (req, res) {
     const sellerId = req.session.authUser.id;
-    const products = await productModel.findAllProductsBySellerId(sellerId);
+    const products = await productService.findAllProductsBySellerId(sellerId);
     res.render('vwSeller/all-products', { products });
 });
 
 // Active Products - CRUD
 router.get('/products/active', async function (req, res) {
     const sellerId = req.session.authUser.id;
-    const products = await productModel.findActiveProductsBySellerId(sellerId);
+    const products = await productService.findActiveProductsBySellerId(sellerId);
     res.render('vwSeller/active', { products });
 });
 
@@ -32,8 +29,8 @@ router.get('/products/active', async function (req, res) {
 router.get('/products/pending', async function (req, res) {
     const sellerId = req.session.authUser.id;
     const [products, stats] = await Promise.all([
-        productModel.findPendingProductsBySellerId(sellerId),
-        productModel.getPendingProductsStats(sellerId)
+        productService.findPendingProductsBySellerId(sellerId),
+        productService.getPendingProductsStats(sellerId)
     ]);
     
     // Lấy message từ query param
@@ -49,8 +46,8 @@ router.get('/products/pending', async function (req, res) {
 router.get('/products/sold', async function (req, res) {
     const sellerId = req.session.authUser.id;
     const [products, stats] = await Promise.all([
-        productModel.findSoldProductsBySellerId(sellerId),
-        productModel.getSoldProductsStats(sellerId)
+        productService.findSoldProductsBySellerId(sellerId),
+        productService.getSoldProductsStats(sellerId)
     ]);
     
     const productsWithReview = await reviewService.enrichProductsWithReviews(products, sellerId);
@@ -61,7 +58,7 @@ router.get('/products/sold', async function (req, res) {
 // Expired Products - No bidder or cancelled
 router.get('/products/expired', async function (req, res) {
     const sellerId = req.session.authUser.id;
-    const products = await productModel.findExpiredProductsBySellerId(sellerId);
+    const products = await productService.findExpiredProductsBySellerId(sellerId);
     
     const productsWithReview = await reviewService.enrichProductsWithReviews(products, sellerId);
     
@@ -118,19 +115,11 @@ router.post('/products/:id/cancel', async function (req, res) {
         const { reason, highest_bidder_id } = req.body;
         
         // Cancel product
-        const product = await productModel.cancelProduct(productId, sellerId);
+        const product = await productService.cancelProduct(productId, sellerId);
         
         // Create review if there's a bidder
         if (highest_bidder_id) {
-            
-            const reviewData = {
-                reviewer_id: sellerId,
-                reviewee_id: highest_bidder_id,
-                product_id: productId,
-                rating: -1,
-                comment: reason || 'Auction cancelled by seller'
-            };
-            await reviewModel.createReview(reviewData);
+            await reviewService.createNegativeReview(sellerId, highest_bidder_id, productId, reason);
         }
         
         res.json({ success: true, message: 'Auction cancelled successfully' });
@@ -246,21 +235,16 @@ router.get('/products/:id/description-updates', async function (req, res) {
         const productId = req.params.id;
         const sellerId = req.session.authUser.id;
         
-        // Verify that the product belongs to the seller
-        const product = await productModel.findByProductId2(productId, null);
-        if (!product) {
-            return res.status(404).json({ success: false, message: 'Product not found' });
-        }
-        
-        if (product.seller_id !== sellerId) {
-            return res.status(403).json({ success: false, message: 'Unauthorized' });
-        }
-        
-        // Get all description updates for this product
-        const updates = await productDescUpdateModel.findByProductId(productId);
+        const updates = await productService.getDescriptionUpdates(productId, sellerId);
         
         res.json({ success: true, updates });
     } catch (error) {
+        if (error.code === 'PRODUCT_NOT_FOUND') {
+            return res.status(404).json({ success: false, message: 'Product not found' });
+        }
+        if (error.code === 'UNAUTHORIZED') {
+            return res.status(403).json({ success: false, message: 'Unauthorized' });
+        }
         console.error('Get description updates error:', error);
         res.status(500).json({ success: false, message: 'Server error' });
     }
@@ -277,23 +261,19 @@ router.put('/products/description-updates/:updateId', async function (req, res) 
             return res.status(400).json({ success: false, message: 'Content is required' });
         }
         
-        // Get the update to verify ownership
-        const update = await productDescUpdateModel.findById(updateId);
-        if (!update) {
-            return res.status(404).json({ success: false, message: 'Update not found' });
-        }
-        
-        // Verify that the product belongs to the seller
-        const product = await productModel.findByProductId2(update.product_id, null);
-        if (!product || product.seller_id !== sellerId) {
-            return res.status(403).json({ success: false, message: 'Unauthorized' });
-        }
-        
-        // Update the content
-        await productDescUpdateModel.updateContent(updateId, content.trim());
+        await productService.updateDescriptionUpdate(updateId, sellerId, content.trim());
         
         res.json({ success: true, message: 'Update saved successfully' });
     } catch (error) {
+        if (error.code === 'UPDATE_NOT_FOUND') {
+            return res.status(404).json({ success: false, message: 'Update not found' });
+        }
+        if (error.code === 'PRODUCT_NOT_FOUND') {
+            return res.status(404).json({ success: false, message: 'Product not found' });
+        }
+        if (error.code === 'UNAUTHORIZED') {
+            return res.status(403).json({ success: false, message: 'Unauthorized' });
+        }
         console.error('Update description error:', error);
         res.status(500).json({ success: false, message: 'Server error' });
     }
@@ -305,23 +285,19 @@ router.delete('/products/description-updates/:updateId', async function (req, re
         const updateId = req.params.updateId;
         const sellerId = req.session.authUser.id;
         
-        // Get the update to verify ownership
-        const update = await productDescUpdateModel.findById(updateId);
-        if (!update) {
-            return res.status(404).json({ success: false, message: 'Update not found' });
-        }
-        
-        // Verify that the product belongs to the seller
-        const product = await productModel.findByProductId2(update.product_id, null);
-        if (!product || product.seller_id !== sellerId) {
-            return res.status(403).json({ success: false, message: 'Unauthorized' });
-        }
-        
-        // Delete the update
-        await productDescUpdateModel.deleteUpdate(updateId);
+        await productService.deleteDescriptionUpdate(updateId, sellerId);
         
         res.json({ success: true, message: 'Update deleted successfully' });
     } catch (error) {
+        if (error.code === 'UPDATE_NOT_FOUND') {
+            return res.status(404).json({ success: false, message: 'Update not found' });
+        }
+        if (error.code === 'PRODUCT_NOT_FOUND') {
+            return res.status(404).json({ success: false, message: 'Product not found' });
+        }
+        if (error.code === 'UNAUTHORIZED') {
+            return res.status(403).json({ success: false, message: 'Unauthorized' });
+        }
         console.error('Delete description error:', error);
         res.status(500).json({ success: false, message: 'Server error' });
     }
