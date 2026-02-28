@@ -496,6 +496,101 @@ await reviewModel.updateReview(
   \end{center}
 \end{frame}
 
+% =========================================================
+% SECTION: Dead Code Cleanup
+% Issue #10
+% =========================================================
+\section{Refactoring: Issue \#10 — Dead Code \texttt{GET /bid-history}}
+
+% ----------------------------------------------------------
+% ISSUE #10 — Slide 1: Problem
+% ----------------------------------------------------------
+\begin{frame}[fragile]{Issue \#10 — YAGNI + KISS: Dead Code Ẩn Sau \texttt{try/catch}}
+  \textbf{Bối cảnh:} \texttt{GET /bid-history/:productId} là một \textbf{JSON API route}. Sau khi \texttt{try/catch} gọi \texttt{res.json()}, handler còn chứa \textbf{$\approx$30 dòng code không bao giờ chạy}.
+
+  \bigskip
+  \textbf{Nguyên tắc vi phạm:} \alert{YAGNI} + \alert{KISS}
+
+  \bigskip
+  \begin{alertblock}{Ba vấn đề cộng hưởng trong cùng dead code block}
+    \begin{enumerate}
+      \item \textbf{Scope error:} \texttt{productId} được khai báo bằng \texttt{const} \emph{bên trong} \texttt{try \{\}} — dead code bên ngoài reference nó → \texttt{ReferenceError} nếu được kích hoạt.
+      \item \textbf{Duplicate object key:} \texttt{seller\_id} được khai báo \textbf{hai lần} trong object literal → JS silently discard key đầu tiên — latent data bug.
+      \item \textbf{Double response:} \texttt{res.render()} được gọi sau \texttt{res.json()} đã sent → \texttt{"Cannot set headers after they are sent"}.
+    \end{enumerate}
+  \end{alertblock}
+
+  \bigskip
+  \textbf{Nguồn gốc:} Đây là phần code render-based từ version cũ của route, trước khi route được chuyển sang JSON API. Phần cũ \textbf{chưa bao giờ được xóa}.
+\end{frame}
+
+% ----------------------------------------------------------
+% ISSUE #10 — Slide 2: Solution
+% ----------------------------------------------------------
+\begin{frame}[fragile]{Issue \#10 — Refactoring: Delete, Don't Patch}
+  \textbf{Chiến lược:} \textbf{Pure deletion} — không thêm abstraction, không restructure, chỉ xóa dead code.
+
+  \begin{columns}[t]
+    \column{0.44\textwidth}
+    \textbf{\alert{Trước}} — 42 dòng, 2 response path:
+    \footnotesize
+    \begin{verbatim}
+router.get('/bid-history/:id',
+  async (req, res) => {
+  try {
+    const productId = parseInt(...);
+    const history = await ...;
+    res.json({ success: true,
+               data: history });
+  } catch (err) { ... }
+
+  // ← DEAD: productId out of scope
+  const result = await productModel
+    .findByProductId(productId);
+  const product = {
+    seller_id: result[0].seller_id,
+    ...
+    seller_id: result[0].seller_id, // dup
+  }
+  res.render('vwProduct/details',
+             { product }); // crash
+});
+    \end{verbatim}
+
+    \column{0.52\textwidth}
+    \textbf{\textcolor{mygreen}{Sau}} — 9 dòng, rõ ràng:
+    \footnotesize
+    \begin{verbatim}
+router.get('/bid-history/:id',
+  async (req, res) => {
+  try {
+    const productId = parseInt(...);
+    const history = await ...;
+    res.json({ success: true,
+               data: history });
+  } catch (err) {
+    res.status(500).json({ ... });
+  }
+}); // ← Clean. Done.
+    \end{verbatim}
+
+    \normalsize
+    \bigskip
+    \textbf{Kết quả đo lường:}
+    \begin{itemize}
+      \item 42 → \textbf{9 dòng} (−78\%)
+      \item DB calls/request: \textbf{1 → 1} (không đổi)
+      \item Latent bugs: \textbf{2 → 0}
+      \item HTTP contract: \textbf{không đổi}
+    \end{itemize}
+  \end{columns}
+
+  \bigskip
+  \begin{center}
+    \textit{Dead code không trung lập — nó \textbf{tích cực làm hại}: tăng cognitive load, che giấu bug, và tạo precedent xấu cho file.}
+  \end{center}
+\end{frame}
+
 % ----------------------------------------------------------
 % Summary Slide — All Issues
 % ----------------------------------------------------------
