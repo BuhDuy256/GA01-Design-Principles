@@ -134,16 +134,14 @@ export const getOrCreateOrder = async (product) => {
 };
 
 
-export const buildCompleteOrderPageData = async (productId, userId) => {
-    // Take productId and userId, return all data needed for rendering complete order page
-    const product = await productModel.findByProductId2(productId, userId);
+// Validation function to check product status and user authorization for order page
+const validateProductForOrderPage = (product, userId) => {
     if (!product) {
         const error = new Error('Product not found');
         error.code = 'PRODUCT_NOT_FOUND';
         throw error;
     }
 
-    // Check product status
     const productStatus = getProductStatus(product);
     if (productStatus !== 'PENDING') {
         const error = new Error('Product is not in pending status');
@@ -151,7 +149,6 @@ export const buildCompleteOrderPageData = async (productId, userId) => {
         throw error;
     }
 
-    // Check if user is authorized to view this page (seller or highest bidder)
     const isSeller = product.seller_id === userId;
     const isHighestBidder = product.highest_bidder_id === userId;
     
@@ -160,29 +157,43 @@ export const buildCompleteOrderPageData = async (productId, userId) => {
         error.code = 'FORBIDDEN';
         throw error;
     }
+    
+    return { isSeller, isHighestBidder };
+};
 
-    // Ensure order exists (idempotent)
+const mapInvoiceData = (rawPaymentInvoice, rawShippingInvoice) => {
+    return {
+        paymentInvoice: rawPaymentInvoice ? {
+            ...rawPaymentInvoice,
+            payment_proof_urls: parsePostgresArray(rawPaymentInvoice.payment_proof_urls)
+        } : null,
+        shippingInvoice: rawShippingInvoice ? {
+            ...rawShippingInvoice,
+            shipping_proof_urls: parsePostgresArray(rawShippingInvoice.shipping_proof_urls)
+        } : null
+    };
+};
+
+
+export const buildCompleteOrderPageData = async (productId, userId) => {
+    const product = await productModel.findByProductId2(productId, userId);
+    
+    // Validation
+    const { isSeller, isHighestBidder } = validateProductForOrderPage(product, userId);
+
+    // Data fetching
     const order = await getOrCreateOrder(product);
 
-    // Parallel fetching of invoices and messages to optimize performance
     const [rawPaymentInvoice, rawShippingInvoice, messages] = await Promise.all([
         invoiceModel.getPaymentInvoice(order.id),
         invoiceModel.getShippingInvoice(order.id),
         orderChatModel.getMessagesByOrderId(order.id)
     ]);
 
-    // Transform data (e.g. parse Postgres array fields) before returning to Controller
-    const paymentInvoice = rawPaymentInvoice ? {
-        ...rawPaymentInvoice,
-        payment_proof_urls: parsePostgresArray(rawPaymentInvoice.payment_proof_urls)
-    } : null;
+    // Map invoice data to include parsed URLs
+    const { paymentInvoice, shippingInvoice } = mapInvoiceData(rawPaymentInvoice, rawShippingInvoice);
 
-    const shippingInvoice = rawShippingInvoice ? {
-        ...rawShippingInvoice,
-        shipping_proof_urls: parsePostgresArray(rawShippingInvoice.shipping_proof_urls)
-    } : null;
-
-
+    
     return {
         product,
         order,
