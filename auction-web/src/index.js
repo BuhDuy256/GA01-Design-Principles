@@ -18,6 +18,7 @@ import { startAuctionEndNotifier } from './scripts/auctionEndNotifier.js';
 import homeRouter from './routes/home.route.js';
 import productRouter from './routes/product.route.js';
 import orderRouter from './routes/order.route.js';
+import ratingRouter from './routes/rating.route.js';
 import accountRouter from './routes/account.route.js';
 import authRouter from './routes/auth.route.js';
 import biddingActivityRouter from './routes/bidding-activity.route.js';
@@ -74,7 +75,7 @@ app.engine('handlebars', engine({
       if (name.length === 0) return null;
       if (name.length === 1) return '*';
       if (name.length === 2) return name[0] + '*';
-      
+
       // Mã hóa xen kẽ: giữ ký tự ở vị trí chẵn (0,2,4...), thay bằng * ở vị trí lẻ (1,3,5...)
       // Khoảng trắng cũng được xử lý như ký tự bình thường
       let masked = '';
@@ -130,13 +131,13 @@ app.engine('handlebars', engine({
       return `${hour}:${minute}:${second}`;
     },
     format_date_input: function (date) {
-        if (!date) return '';
-        const d = new Date(date);
-        if (isNaN(d.getTime())) return '';
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+      if (!date) return '';
+      const d = new Date(date);
+      if (isNaN(d.getTime())) return '';
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     },
     time_remaining(date) {
       const now = new Date();
@@ -153,14 +154,14 @@ app.engine('handlebars', engine({
       const end = new Date(date);
       console.log(end);
       const diff = end - now;
-      
+
       if (diff <= 0) return 'Auction Ended';
-      
+
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
       const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
       const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-      
+
       // > 3 ngày: hiển thị ngày kết thúc
       if (days > 3) {
         if (isNaN(end.getTime())) return '';
@@ -173,22 +174,22 @@ app.engine('handlebars', engine({
         const second = String(end.getSeconds()).padStart(2, '0');
         return `${hour}:${minute}:${second} ${day}/${month}/${year}`
       }
-      
+
       // <= 3 ngày: hiển thị ... days left
       if (days >= 1) {
         return `${days} days left`;
       }
-      
+
       // < 1 ngày: hiển thị ... hours left
       if (hours >= 1) {
         return `${hours} hours left`;
       }
-      
+
       // < 1 giờ: hiển thị ... minutes left
       if (minutes >= 1) {
         return `${minutes} minutes left`;
       }
-      
+
       // < 1 phút: hiển thị ... seconds left
       return `${seconds} seconds left`;
     },
@@ -196,9 +197,9 @@ app.engine('handlebars', engine({
       const now = new Date();
       const end = new Date(date);
       const diff = end - now;
-      
+
       if (diff <= 0) return true; // Auction Ended counts as relative
-      
+
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
       return days <= 3; // True nếu <= 3 ngày (hiển thị relative time)
     },
@@ -218,34 +219,35 @@ app.engine('handlebars', engine({
       }
       return range;
     },
-    and(...args) { 
-      return args.slice(0, -1).every(Boolean); 
+    and(...args) {
+      return args.slice(0, -1).every(Boolean);
     },
-    or(...args) { 
-      return args.slice(0, -1).some(Boolean); 
+    or(...args) {
+      return args.slice(0, -1).some(Boolean);
     },
-    gt(a, b) { 
-      return a > b; 
+    gt(a, b) {
+      return a > b;
     },
     gte(a, b) { return a >= b; },
-    lt(a, b) { 
-      return a < b; 
+    lt(a, b) {
+      return a < b;
     },
     ne(a, b) {
       return a !== b;
     },
-    lte(a, b) { 
-      return a <= b; 
+    lte(a, b) {
+      return a <= b;
     },
-    gte(a, b) { 
-      return a >= b; 
+    gte(a, b) {
+      return a >= b;
     },
     lte(a, b) { return a <= b; },
-    add(a, b) { 
-      return a + b; 
+    add(a, b) {
+      return a + b;
     },
-    subtract(a, b) { 
-      return a - b; },
+    subtract(a, b) {
+      return a - b;
+    },
     multiply(a, b) {
       return a * b;
     },
@@ -268,8 +270,8 @@ app.engine('handlebars', engine({
     },
   },
   partialsDir: [
-        path.join(__dirname, 'views/partials'), 
-        path.join(__dirname, 'views/vwAccount') 
+    path.join(__dirname, 'views/partials'),
+    path.join(__dirname, 'views/vwAccount')
   ]
 }));
 app.set('view engine', 'handlebars');
@@ -316,11 +318,11 @@ app.use(async function (req, res, next) {
   if (typeof req.session.isAuthenticated === 'undefined') {
     req.session.isAuthenticated = false;
   }
-  
+
   // Nếu user đã đăng nhập, kiểm tra xem thông tin có thay đổi không
   if (req.session.isAuthenticated && req.session.authUser) {
     const currentUser = await userModel.findById(req.session.authUser.id);
-    
+
     // Nếu không tìm thấy user (bị xóa) hoặc thông tin đã thay đổi, cập nhật session
     if (!currentUser) {
       // User bị xóa, đăng xuất
@@ -342,7 +344,7 @@ app.use(async function (req, res, next) {
       };
     }
   }
-  
+
   res.locals.isAuthenticated = req.session.isAuthenticated;
   res.locals.authUser = req.session.authUser;
   res.locals.isAdmin = req.session.authUser?.role === 'admin';
@@ -369,8 +371,8 @@ app.use('/admin', isAdmin);
 
 // B. Thiết lập giao diện Admin (Bật cờ để Layout biết đường hiển thị Sidebar)
 app.use('/admin', function (req, res, next) {
-    res.locals.isAdminMode = true; 
-    next();
+  res.locals.isAdminMode = true;
+  next();
 });
 
 // // C. Redirect thông minh cho trang chủ '/'
@@ -418,14 +420,15 @@ app.get('/api/categories', async (req, res) => {
 app.use('/', homeRouter);
 app.use('/products/order', orderRouter);
 app.use('/products', productRouter);
-app.use('/account', authRouter);
+app.use('/products', orderRouter);
+app.use('/products', ratingRouter);
 app.use('/account', accountRouter);
 app.use('/account', biddingActivityRouter);
 app.use('/account', reputationRouter);
 
 app.listen(PORT, function () {
   console.log(`Server is running on http://localhost:${PORT}`);
-  
+
   // Start scheduled jobs
   startAuctionEndNotifier(30); // Check every 30 seconds for ended auctions
 });

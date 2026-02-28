@@ -1,4 +1,4 @@
-import express from 'express';
+﻿import express from 'express';
 import * as productModel from '../models/product.model.js';
 import * as reviewModel from '../models/review.model.js';
 import * as userModel from '../models/user.model.js';
@@ -12,7 +12,11 @@ import * as rejectedBidderModel from '../models/rejectedBidder.model.js';
 import * as invoiceModel from '../models/invoice.model.js';
 import * as orderChatModel from '../models/orderChat.model.js';
 import { isAuthenticated } from '../middlewares/auth.mdw.js';
+import { resolveAuctionStatus } from '../services/auction/auction-state.js';
+import * as auctionService from '../services/auction/auction.service.js';
+import { buildBidResponseMessage } from '../services/auction/bid-engine.js';
 import { sendMail } from '../utils/mailer.js';
+import * as notificationService from '../services/notification.service.js';
 import db from '../utils/db.js';
 import { parsePostgresArray } from '../utils/dbHelpers.js';
 import * as orderService from '../services/order.service.js';
@@ -21,11 +25,11 @@ const router = express.Router();
 const prepareProductList = async (products) => {
   const now = new Date();
   if (!products) return [];
-  
+
   // Load settings from database every time to get latest value
   const settings = await systemSettingModel.getSettings();
   const N_MINUTES = settings.new_product_limit_minutes;
-  
+
   return products.map(product => {
     const created = new Date(product.created_at);
     const isNew = (now - created) < (N_MINUTES * 60 * 1000);
@@ -44,19 +48,19 @@ router.get('/category', async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = 3;
   const offset = (page - 1) * limit;
-  
+
   // Check if category is level 1 (parent_id is null)
   const category = await categoryModel.findByCategoryId(categoryId);
-  
+
   let categoryIds = [categoryId];
-  
+
   // If it's a level 1 category, include all child categories
   if (category && category.parent_id === null) {
     const childCategories = await categoryModel.findChildCategoryIds(categoryId);
     const childIds = childCategories.map(cat => cat.id);
     categoryIds = [categoryId, ...childIds];
   }
-  
+
   const list = await productModel.findByCategoryIds(categoryIds, limit, offset, sort, userId);
   const products = await prepareProductList(list);
   const total = await productModel.countByCategoryIds(categoryIds);
@@ -67,7 +71,7 @@ router.get('/category', async (req, res) => {
   let to = page * limit;
   if (to > totalCount) to = totalCount;
   if (totalCount === 0) { from = 0; to = 0; }
-  res.render('vwProduct/list', { 
+  res.render('vwProduct/list', {
     products: products,
     totalCount,
     from,
@@ -85,43 +89,43 @@ router.get('/search', async (req, res) => {
   const q = req.query.q || '';
   const logic = req.query.logic || 'and'; // 'and' or 'or'
   const sort = req.query.sort || '';
-  
+
   // If keyword is empty, return empty results
   if (q.length === 0) {
     return res.render('vwProduct/list', {
-        q: q,
-        logic: logic,
-        sort: sort,
-        products: [],
-        totalCount: 0,
-        from: 0,
-        to: 0,
-        currentPage: 1,
-        totalPages: 0,
+      q: q,
+      logic: logic,
+      sort: sort,
+      products: [],
+      totalCount: 0,
+      from: 0,
+      to: 0,
+      currentPage: 1,
+      totalPages: 0,
     });
   }
 
   const limit = 3;
   const page = parseInt(req.query.page) || 1;
   const offset = (page - 1) * limit;
-  
+
   // Pass keywords directly without modification
   // plainto_tsquery will handle tokenization automatically
   const keywords = q.trim();
-  
+
   // Search in both product name and category
   const list = await productModel.searchPageByKeywords(keywords, limit, offset, userId, logic, sort);
   const products = await prepareProductList(list);
   const total = await productModel.countByKeywords(keywords, logic);
   const totalCount = parseInt(total.count) || 0;
-  
+
   const nPages = Math.ceil(totalCount / limit);
   let from = (page - 1) * limit + 1;
   let to = page * limit;
   if (to > totalCount) to = totalCount;
   if (totalCount === 0) { from = 0; to = 0; }
-  
-  res.render('vwProduct/list', { 
+
+  res.render('vwProduct/list', {
     products: products,
     totalCount,
     from,
@@ -139,35 +143,14 @@ router.get('/detail', async (req, res) => {
   const productId = req.query.id;
   const product = await productModel.findByProductId2(productId, userId);
   const related_products = await productModel.findRelatedProducts(productId);
-  
+
   // Kiểm tra nếu không tìm thấy sản phẩm
   if (!product) {
     return res.status(404).render('404', { message: 'Product not found' });
   }
   console.log('Product details:', product);
-  // Determine product status
-  const now = new Date();
-  const endDate = new Date(product.end_at);
-  let productStatus = 'ACTIVE';
-  
-  // Auto-close auction if time expired and not yet closed
-  if (endDate <= now && !product.closed_at && product.is_sold === null) {
-    // Update closed_at to mark auction end time
-    await productModel.updateProduct(productId, { closed_at: endDate });
-    product.closed_at = endDate; // Update local object
-  }
-  
-  if (product.is_sold === true) {
-    productStatus = 'SOLD';
-  } else if (product.is_sold === false) {
-    productStatus = 'CANCELLED';
-  } else if ((endDate <= now || product.closed_at) && product.highest_bidder_id) {
-    productStatus = 'PENDING';
-  } else if (endDate <= now && !product.highest_bidder_id) {
-    productStatus = 'EXPIRED';
-  } else if (endDate > now && !product.closed_at) {
-    productStatus = 'ACTIVE';
-  }
+  // Determine product status (single source of truth via auction-state.js)
+  const productStatus = resolveAuctionStatus(product);
 
   // Authorization check: Non-ACTIVE products can only be viewed by seller or highest bidder
   if (productStatus !== 'ACTIVE') {
@@ -175,10 +158,10 @@ router.get('/detail', async (req, res) => {
       // User not logged in, cannot view non-active products
       return res.status(403).render('403', { message: 'You do not have permission to view this product' });
     }
-    
+
     const isSeller = product.seller_id === userId;
     const isHighestBidder = product.highest_bidder_id === userId;
-    
+
     if (!isSeller && !isHighestBidder) {
       return res.status(403).render('403', { message: 'You do not have permission to view this product' });
     }
@@ -202,12 +185,12 @@ router.get('/detail', async (req, res) => {
   if (req.session.authUser && product.seller_id === req.session.authUser.id) {
     rejectedBidders = await rejectedBidderModel.getRejectedBidders(productId);
   }
-  
+
   // Load replies for all comments in one batch to avoid N+1 query problem
   if (comments.length > 0) {
     const commentIds = comments.map(c => c.id);
     const allReplies = await productCommentModel.getRepliesByCommentIds(commentIds);
-    
+
     // Group replies by parent comment id
     const repliesMap = new Map();
     for (const reply of allReplies) {
@@ -216,16 +199,16 @@ router.get('/detail', async (req, res) => {
       }
       repliesMap.get(reply.parent_id).push(reply);
     }
-    
+
     // Attach replies to their parent comments
     for (const comment of comments) {
       comment.replies = repliesMap.get(comment.id) || [];
     }
   }
-  
+
   // Calculate total pages
   const totalPages = Math.ceil(totalComments / commentsPerPage);
-  
+
   // Get flash messages from session
   const success_message = req.session.success_message;
   const error_message = req.session.error_message;
@@ -235,7 +218,7 @@ router.get('/detail', async (req, res) => {
   // Get seller rating
   const sellerRatingObject = await reviewModel.calculateRatingPoint(product.seller_id);
   const sellerReviews = await reviewModel.getReviewsByUserId(product.seller_id);
-  
+
   // Get bidder rating (if exists)
   let bidderRatingObject = { rating_point: null };
   let bidderReviews = [];
@@ -243,15 +226,15 @@ router.get('/detail', async (req, res) => {
     bidderRatingObject = await reviewModel.calculateRatingPoint(product.highest_bidder_id);
     bidderReviews = await reviewModel.getReviewsByUserId(product.highest_bidder_id);
   }
-  
+
   // Check if should show payment button (for seller or highest bidder when status is PENDING)
   let showPaymentButton = false;
   if (req.session.authUser && productStatus === 'PENDING') {
     const userId = req.session.authUser.id;
     showPaymentButton = (product.seller_id === userId || product.highest_bidder_id === userId);
   }
-  
-  res.render('vwProduct/details', { 
+
+  res.render('vwProduct/details', {
     product,
     productStatus, // Pass status to view
     authUser: req.session.authUser, // Pass authUser for checking highest_bidder_id
@@ -276,7 +259,7 @@ router.get('/detail', async (req, res) => {
 // ROUTE: BIDDING HISTORY PAGE (Requires Authentication)
 router.get('/bidding-history', isAuthenticated, async (req, res) => {
   const productId = req.query.id;
-  
+
   if (!productId) {
     return res.redirect('/');
   }
@@ -284,15 +267,15 @@ router.get('/bidding-history', isAuthenticated, async (req, res) => {
   try {
     // Get product information
     const product = await productModel.findByProductId2(productId, null);
-    
+
     if (!product) {
       return res.status(404).render('404', { message: 'Product not found' });
     }
 
     // Load bidding history
     const biddingHistory = await biddingHistoryModel.getBiddingHistory(productId);
-    
-    res.render('vwProduct/biddingHistory', { 
+
+    res.render('vwProduct/biddingHistory', {
       product,
       biddingHistory
     });
@@ -334,448 +317,16 @@ router.delete('/watchlist', isAuthenticated, async (req, res) => {
 router.post('/bid', isAuthenticated, async (req, res) => {
   const userId = req.session.authUser.id;
   const productId = parseInt(req.body.productId);
-  const bidAmount = parseFloat(req.body.bidAmount.replace(/,/g, '')); // Remove commas from input
+  const bidAmount = parseFloat(req.body.bidAmount.replace(/,/g, ''));
 
   try {
-    // Use transaction with row-level locking to prevent race conditions
-    const result = await db.transaction(async (trx) => {
-      // 1. Lock the product row for update to prevent concurrent modifications
-      const product = await trx('products')
-        .where('id', productId)
-        .forUpdate() // This creates a row-level lock
-        .first();
-      
-      if (!product) {
-        throw new Error('Product not found');
-      }
-
-      // Store previous highest bidder info for email notification
-      const previousHighestBidderId = product.highest_bidder_id;
-      const previousPrice = parseFloat(product.current_price || product.starting_price);
-
-      // 2. Check if product is already sold
-      if (product.is_sold === true) {
-        throw new Error('This product has already been sold');
-      }
-
-      // 3. Check if seller cannot bid on their own product
-      if (product.seller_id === userId) {
-        throw new Error('You cannot bid on your own product');
-      }
-
-      // 4. Check if bidder has been rejected
-      const isRejected = await trx('rejected_bidders')
-        .where('product_id', productId)
-        .where('bidder_id', userId)
-        .first();
-      
-      if (isRejected) {
-        throw new Error('You have been rejected from bidding on this product by the seller');
-      }
-
-      // 5. Check rating point
-      const ratingPoint = await reviewModel.calculateRatingPoint(userId);
-      const userReviews = await reviewModel.getReviewsByUserId(userId);
-      const hasReviews = userReviews.length > 0;
-      
-      if (!hasReviews) {
-        // User has no reviews yet (unrated)
-        if (!product.allow_unrated_bidder) {
-          throw new Error('This seller does not allow unrated bidders to bid on this product.');
-        }
-      } else if (ratingPoint.rating_point < 0) {
-        throw new Error('You are not eligible to place bids due to your rating.');
-      } else if (ratingPoint.rating_point === 0) {
-        throw new Error('You are not eligible to place bids due to your rating.');
-      } else if (ratingPoint.rating_point <= 0.8) {
-        throw new Error('Your rating point is not greater than 80%. You cannot place bids.');
-      }
-
-      // 6. Check if auction has ended
-      const now = new Date();
-      const endDate = new Date(product.end_at);
-      if (now > endDate) {
-        throw new Error('Auction has ended');
-      }
-
-      // 7. Validate bid amount against current price
-      const currentPrice = parseFloat(product.current_price || product.starting_price);
-      
-      // bidAmount đã được validate ở frontend là phải > currentPrice
-      // Nhưng vẫn kiểm tra lại để đảm bảo
-      if (bidAmount <= currentPrice) {
-        throw new Error(`Bid must be higher than current price (${currentPrice.toLocaleString()} VND)`);
-      }
-
-      // 8. Check minimum bid increment
-      const minIncrement = parseFloat(product.step_price);
-      if (bidAmount < currentPrice + minIncrement) {
-        throw new Error(`Bid must be at least ${minIncrement.toLocaleString()} VND higher than current price`);
-      }
-
-      // 9. Check and apply auto-extend if needed
-      let extendedEndTime = null;
-      if (product.auto_extend) {
-        // Get system settings for auto-extend configuration
-        const settings = await systemSettingModel.getSettings();
-        const triggerMinutes = settings?.auto_extend_trigger_minutes;
-        const extendMinutes = settings?.auto_extend_duration_minutes;
-        
-        // Calculate time remaining until auction ends
-        const endTime = new Date(product.end_at);
-        const minutesRemaining = (endTime - now) / (1000 * 60);
-        
-        // If within trigger window, extend the auction
-        if (minutesRemaining <= triggerMinutes) {
-          extendedEndTime = new Date(endTime.getTime() + extendMinutes * 60 * 1000);
-          
-          // Update end_at in the product object for subsequent checks
-          product.end_at = extendedEndTime;
-        }
-      }
-
-      // ========== AUTOMATIC BIDDING LOGIC ==========
-      
-      let newCurrentPrice;
-      let newHighestBidderId;
-      let newHighestMaxPrice;
-      let shouldCreateHistory = true; // Flag to determine if we should create bidding history
-
-      // Special handling for buy_now_price: First-come-first-served
-      // If current highest bidder already has max >= buy_now, and a NEW bidder comes in, 
-      // the existing bidder wins at buy_now price immediately
-      const buyNowPrice = product.buy_now_price ? parseFloat(product.buy_now_price) : null;
-      let buyNowTriggered = false;
-      
-      if (buyNowPrice && product.highest_bidder_id && product.highest_max_price && product.highest_bidder_id !== userId) {
-        const currentHighestMaxPrice = parseFloat(product.highest_max_price);
-        
-        // If current highest bidder already bid >= buy_now, they win immediately (when new bidder comes)
-        if (currentHighestMaxPrice >= buyNowPrice) {
-          newCurrentPrice = buyNowPrice;
-          newHighestBidderId = product.highest_bidder_id;
-          newHighestMaxPrice = currentHighestMaxPrice;
-          buyNowTriggered = true;
-          // New bidder's auto-bid will be recorded, but they don't win
-        }
-      }
-
-      // Only run normal auto-bidding if buy_now not triggered by existing bidder
-      if (!buyNowTriggered) {
-        // Case 0: Người đặt giá chính là người đang giữ giá cao nhất
-        if (product.highest_bidder_id === userId) {
-          // Chỉ update max_price trong auto_bidding, không thay đổi current_price
-          // Không tạo bidding_history mới vì giá không thay đổi
-          newCurrentPrice = parseFloat(product.current_price || product.starting_price);
-          newHighestBidderId = userId;
-          newHighestMaxPrice = bidAmount; // Update max price
-          shouldCreateHistory = false; // Không tạo history mới
-        }
-        // Case 1: Chưa có người đấu giá nào (first bid)
-        else if (!product.highest_bidder_id || !product.highest_max_price) {
-          newCurrentPrice = product.starting_price; // Only 1 bidder, no competition, set to starting price
-          newHighestBidderId = userId;
-          newHighestMaxPrice = bidAmount;
-        } 
-        // Case 2: Đã có người đấu giá trước đó
-        else {
-          const currentHighestMaxPrice = parseFloat(product.highest_max_price);
-          const currentHighestBidderId = product.highest_bidder_id;
-
-          // Case 2a: bidAmount < giá tối đa của người cũ
-          if (bidAmount < currentHighestMaxPrice) {
-            // Người cũ thắng, giá hiện tại = bidAmount của người mới
-            newCurrentPrice = bidAmount;
-            newHighestBidderId = currentHighestBidderId;
-            newHighestMaxPrice = currentHighestMaxPrice; // Giữ nguyên max price của người cũ
-          }
-          // Case 2b: bidAmount == giá tối đa của người cũ
-          else if (bidAmount === currentHighestMaxPrice) {
-            // Người cũ thắng theo nguyên tắc first-come-first-served
-            newCurrentPrice = bidAmount;
-            newHighestBidderId = currentHighestBidderId;
-            newHighestMaxPrice = currentHighestMaxPrice;
-          }
-          // Case 2c: bidAmount > giá tối đa của người cũ
-          else {
-            // Người mới thắng, giá hiện tại = giá max của người cũ + step_price
-            newCurrentPrice = currentHighestMaxPrice + minIncrement;
-            newHighestBidderId = userId;
-            newHighestMaxPrice = bidAmount;
-          }
-        }
-
-        // 7. Check if buy now price is reached after auto-bidding
-        if (buyNowPrice && newCurrentPrice >= buyNowPrice) {
-          // Nếu đạt giá mua ngay, set giá = buy_now_price
-          newCurrentPrice = buyNowPrice;
-          buyNowTriggered = true;
-        }
-      }
-
-      let productSold = buyNowTriggered;
-
-      // 8. Update product with new price, highest bidder, and highest max price
-      const updateData = {
-        current_price: newCurrentPrice,
-        highest_bidder_id: newHighestBidderId,
-        highest_max_price: newHighestMaxPrice
-      };
-
-      // If buy now price is reached, close auction immediately - takes priority over auto-extend
-      if (productSold) {
-        updateData.end_at = new Date(); // Kết thúc auction ngay lập tức
-        updateData.closed_at = new Date();
-        // is_sold remains NULL → Product goes to PENDING status (waiting for payment)
-      }
-      // If auto-extend was triggered and product NOT sold, update end_at
-      else if (extendedEndTime) {
-        updateData.end_at = extendedEndTime;
-      }
-
-      await trx('products')
-        .where('id', productId)
-        .update(updateData);
-
-      // 9. Add bidding history record only if price changed
-      // Record ghi lại người đang nắm giá sau khi tính toán automatic bidding
-      if (shouldCreateHistory) {
-        await trx('bidding_history').insert({
-          product_id: productId,
-          bidder_id: newHighestBidderId,
-          current_price: newCurrentPrice
-        });
-      }
-
-      // 10. Update auto_bidding table for the bidder
-      // Sử dụng raw query để upsert (insert or update)
-      await trx.raw(`
-        INSERT INTO auto_bidding (product_id, bidder_id, max_price)
-        VALUES (?, ?, ?)
-        ON CONFLICT (product_id, bidder_id)
-        DO UPDATE SET 
-          max_price = EXCLUDED.max_price,
-          created_at = NOW()
-      `, [productId, userId, bidAmount]);
-
-      return { 
-        newCurrentPrice, 
-        newHighestBidderId, 
-        userId, 
-        bidAmount,
-        productSold,
-        autoExtended: !!extendedEndTime,
-        newEndTime: extendedEndTime,
-        productName: product.name,
-        sellerId: product.seller_id,
-        previousHighestBidderId,
-        previousPrice,
-        priceChanged: previousPrice !== newCurrentPrice
-      };
-    });
-
-    // ========== SEND EMAIL NOTIFICATIONS (outside transaction) ==========
-    // IMPORTANT: Run email sending asynchronously to avoid blocking the response
-    // This significantly improves perceived performance for the user
+    const result = await auctionService.placeBid({ productId, userId, bidAmount });
     const productUrl = `${req.protocol}://${req.get('host')}/products/detail?id=${productId}`;
-    
-    // Fire and forget - don't await email sending
-    (async () => {
-      try {
-        // Get user info for emails
-        const [seller, currentBidder, previousBidder] = await Promise.all([
-          userModel.findById(result.sellerId),
-          userModel.findById(result.userId),
-          result.previousHighestBidderId && result.previousHighestBidderId !== result.userId 
-            ? userModel.findById(result.previousHighestBidderId) 
-            : null
-        ]);
 
-        // Send all emails in parallel instead of sequentially
-        const emailPromises = [];
+    // Fire-and-forget: non-blocking email dispatch
+    auctionService.sendBidNotifications({ result, productId, productUrl });
 
-        // 1. Email to SELLER - New bid notification
-        if (seller && seller.email) {
-          emailPromises.push(sendMail({
-          to: seller.email,
-          subject: `💰 New bid on your product: ${result.productName}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <div style="background: linear-gradient(135deg, #72AEC8 0%, #5a9ab8 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                <h1 style="color: white; margin: 0;">New Bid Received!</h1>
-              </div>
-              <div style="background-color: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-                <p>Dear <strong>${seller.fullname}</strong>,</p>
-                <p>Great news! Your product has received a new bid:</p>
-                <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #72AEC8;">
-                  <h3 style="margin: 0 0 15px 0; color: #333;">${result.productName}</h3>
-                  <p style="margin: 5px 0;"><strong>Bidder:</strong> ${currentBidder ? currentBidder.fullname : 'Anonymous'}</p>
-                  <p style="margin: 5px 0;"><strong>Current Price:</strong></p>
-                  <p style="font-size: 28px; color: #72AEC8; margin: 5px 0; font-weight: bold;">
-                    ${new Intl.NumberFormat('en-US').format(result.newCurrentPrice)} VND
-                  </p>
-                  ${result.previousPrice !== result.newCurrentPrice ? `
-                  <p style="margin: 5px 0; color: #666; font-size: 14px;">
-                    <i>Previous: ${new Intl.NumberFormat('en-US').format(result.previousPrice)} VND</i>
-                  </p>
-                  ` : ''}
-                </div>
-                ${result.productSold ? `
-                <div style="background-color: #d4edda; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                  <p style="margin: 0; color: #155724;"><strong>🎉 Buy Now price reached!</strong> Auction has ended.</p>
-                </div>
-                ` : ''}
-                <div style="text-align: center; margin: 30px 0;">
-                  <a href="${productUrl}" style="display: inline-block; background: linear-gradient(135deg, #72AEC8 0%, #5a9ab8 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                    View Product
-                  </a>
-                </div>
-              </div>
-              <p style="color: #888; font-size: 12px; text-align: center; margin-top: 20px;">This is an automated message from Online Auction.</p>
-            </div>
-          `
-          }));
-        }
-
-        // 2. Email to CURRENT BIDDER - Bid confirmation
-        if (currentBidder && currentBidder.email) {
-          const isWinning = result.newHighestBidderId === result.userId;
-          emailPromises.push(sendMail({
-          to: currentBidder.email,
-          subject: isWinning 
-            ? `✅ You're winning: ${result.productName}` 
-            : `📊 Bid placed: ${result.productName}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <div style="background: linear-gradient(135deg, ${isWinning ? '#28a745' : '#ffc107'} 0%, ${isWinning ? '#218838' : '#e0a800'} 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                <h1 style="color: white; margin: 0;">${isWinning ? "You're Winning!" : "Bid Placed"}</h1>
-              </div>
-              <div style="background-color: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-                <p>Dear <strong>${currentBidder.fullname}</strong>,</p>
-                <p>${isWinning 
-                  ? 'Congratulations! Your bid has been placed and you are currently the highest bidder!' 
-                  : 'Your bid has been placed. However, another bidder has a higher maximum bid.'}</p>
-                <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid ${isWinning ? '#28a745' : '#ffc107'};">
-                  <h3 style="margin: 0 0 15px 0; color: #333;">${result.productName}</h3>
-                  <p style="margin: 5px 0;"><strong>Your Max Bid:</strong> ${new Intl.NumberFormat('en-US').format(result.bidAmount)} VND</p>
-                  <p style="margin: 5px 0;"><strong>Current Price:</strong></p>
-                  <p style="font-size: 28px; color: ${isWinning ? '#28a745' : '#ffc107'}; margin: 5px 0; font-weight: bold;">
-                    ${new Intl.NumberFormat('en-US').format(result.newCurrentPrice)} VND
-                  </p>
-                </div>
-                ${result.productSold && isWinning ? `
-                <div style="background-color: #d4edda; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                  <p style="margin: 0; color: #155724;"><strong>🎉 Congratulations! You won this product!</strong></p>
-                  <p style="margin: 10px 0 0 0; color: #155724;">Please proceed to complete your payment.</p>
-                </div>
-                ` : ''}
-                ${!isWinning ? `
-                <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                  <p style="margin: 0; color: #856404;"><strong>💡 Tip:</strong> Consider increasing your maximum bid to improve your chances of winning.</p>
-                </div>
-                ` : ''}
-                <div style="text-align: center; margin: 30px 0;">
-                  <a href="${productUrl}" style="display: inline-block; background: linear-gradient(135deg, #72AEC8 0%, #5a9ab8 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                    ${result.productSold && isWinning ? 'Complete Payment' : 'View Auction'}
-                  </a>
-                </div>
-              </div>
-              <p style="color: #888; font-size: 12px; text-align: center; margin-top: 20px;">This is an automated message from Online Auction.</p>
-            </div>
-          `
-          }));
-        }
-
-        // 3. Email to PREVIOUS HIGHEST BIDDER - Price update notification
-        // Send whenever price changes and there was a previous bidder (not the current bidder)
-        if (previousBidder && previousBidder.email && result.priceChanged) {
-          const wasOutbid = result.newHighestBidderId !== result.previousHighestBidderId;
-          
-          emailPromises.push(sendMail({
-          to: previousBidder.email,
-          subject: wasOutbid 
-            ? `⚠️ You've been outbid: ${result.productName}`
-            : `📊 Price updated: ${result.productName}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <div style="background: linear-gradient(135deg, ${wasOutbid ? '#dc3545' : '#ffc107'} 0%, ${wasOutbid ? '#c82333' : '#e0a800'} 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                <h1 style="color: white; margin: 0;">${wasOutbid ? "You've Been Outbid!" : "Price Updated"}</h1>
-              </div>
-              <div style="background-color: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-                <p>Dear <strong>${previousBidder.fullname}</strong>,</p>
-                ${wasOutbid 
-                  ? `<p>Unfortunately, another bidder has placed a higher bid on the product you were winning:</p>`
-                  : `<p>Good news! You're still the highest bidder, but the current price has been updated due to a new bid:</p>`
-                }
-                <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid ${wasOutbid ? '#dc3545' : '#ffc107'};">
-                  <h3 style="margin: 0 0 15px 0; color: #333;">${result.productName}</h3>
-                  ${!wasOutbid ? `
-                  <p style="margin: 5px 0; color: #28a745;"><strong>✓ You're still winning!</strong></p>
-                  ` : ''}
-                  <p style="margin: 5px 0;"><strong>New Current Price:</strong></p>
-                  <p style="font-size: 28px; color: ${wasOutbid ? '#dc3545' : '#ffc107'}; margin: 5px 0; font-weight: bold;">
-                    ${new Intl.NumberFormat('en-US').format(result.newCurrentPrice)} VND
-                  </p>
-                  <p style="margin: 10px 0 0 0; color: #666; font-size: 14px;">
-                    <i>Previous price: ${new Intl.NumberFormat('en-US').format(result.previousPrice)} VND</i>
-                  </p>
-                </div>
-                ${wasOutbid ? `
-                <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                  <p style="margin: 0; color: #856404;"><strong>💡 Don't miss out!</strong> Place a new bid to regain the lead.</p>
-                </div>
-                ` : `
-                <div style="background-color: #d4edda; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                  <p style="margin: 0; color: #155724;"><strong>💡 Tip:</strong> Your automatic bidding is working! Consider increasing your max bid if you want more protection.</p>
-                </div>
-                `}
-                <div style="text-align: center; margin: 30px 0;">
-                  <a href="${productUrl}" style="display: inline-block; background: linear-gradient(135deg, ${wasOutbid ? '#28a745' : '#72AEC8'} 0%, ${wasOutbid ? '#218838' : '#5a9ab8'} 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">
-                    ${wasOutbid ? 'Place New Bid' : 'View Auction'}
-                  </a>
-                </div>
-              </div>
-              <p style="color: #888; font-size: 12px; text-align: center; margin-top: 20px;">This is an automated message from Online Auction.</p>
-            </div>
-          `
-          }));
-        }
-
-        // Send all emails in parallel
-        if (emailPromises.length > 0) {
-          await Promise.all(emailPromises);
-          console.log(`${emailPromises.length} bid notification email(s) sent for product #${productId}`);
-        }
-      } catch (emailError) {
-        console.error('Failed to send bid notification emails:', emailError);
-        // Don't fail - emails are sent asynchronously
-      }
-    })(); // Execute async function immediately but don't wait for it
-
-    // Success message
-    let baseMessage = '';
-    if (result.productSold) {
-      // Sản phẩm đã đạt giá buy now và chuyển sang PENDING (chờ thanh toán)
-      if (result.newHighestBidderId === result.userId) {
-        // Người đặt giá này thắng và trigger buy now
-        baseMessage = `Congratulations! You won the product with Buy Now price: ${result.newCurrentPrice.toLocaleString()} VND. Please proceed to payment.`;
-      } else {
-        // Người đặt giá này KHÔNG thắng nhưng đã trigger buy now cho người khác
-        baseMessage = `Product has been sold to another bidder at Buy Now price: ${result.newCurrentPrice.toLocaleString()} VND. Your bid helped reach the Buy Now threshold.`;
-      }
-    } else if (result.newHighestBidderId === result.userId) {
-      baseMessage = `Bid placed successfully! Current price: ${result.newCurrentPrice.toLocaleString()} VND (Your max: ${result.bidAmount.toLocaleString()} VND)`;
-    } else {
-      baseMessage = `Bid placed! Another bidder is currently winning at ${result.newCurrentPrice.toLocaleString()} VND`;
-    }
-    
-    // Add auto-extend notification if applicable
-    if (result.autoExtended) {
-      const extendedTimeStr = new Date(result.newEndTime).toLocaleString('vi-VN');
-      baseMessage += ` | Auction extended to ${extendedTimeStr}`;
-    }
-    
-    req.session.success_message = baseMessage;
+    req.session.success_message = buildBidResponseMessage({ ...result, bidAmount });
     res.redirect(`/products/detail?id=${productId}`);
 
   } catch (error) {
@@ -784,39 +335,6 @@ router.post('/bid', isAuthenticated, async (req, res) => {
     res.redirect(`/products/detail?id=${productId}`);
   }
 });
-
-
-// ROUTE: COMPLETE ORDER PAGE (For PENDING products)
-
-router.get('/complete-order', isAuthenticated, async (req, res) => {
-    try {
-        const userId = req.session.authUser.id;
-        const productId = req.query.id;
-        
-        if (!productId) return res.redirect('/');
-        
-        // Build complete order page data (includes product, payment info, etc.)
-        const viewData = await orderService.buildCompleteOrderPageData(productId, userId);
-        
-        // Render View
-        res.render('vwProduct/complete-order', viewData);
-
-    } catch (error) {
-        switch (error.code) {
-            case 'PRODUCT_NOT_FOUND':
-                return res.status(404).render('404', { message: 'Product not found' });
-            case 'NOT_PENDING':
-                return res.redirect(`/products/detail?id=${req.query.id}`);
-            case 'FORBIDDEN':
-                return res.status(403).render('403', { message: 'You do not have permission to access this page' });
-            default:
-                console.error('Complete order page error:', error);
-                return res.status(500).render('500', { message: 'Server Error' });
-        }
-    }
-});
-
-
 
 // ROUTE: POST COMMENT
 router.post('/comment', isAuthenticated, async (req, res) => {
@@ -829,118 +347,31 @@ router.post('/comment', isAuthenticated, async (req, res) => {
       return res.redirect(`/products/detail?id=${productId}`);
     }
 
-    // Create comment
+    // Persist the comment
     await productCommentModel.createComment(productId, userId, content.trim(), parentId || null);
 
-    // Get product and users for email notification
-    const product = await productModel.findByProductId2(productId, null);
-    const commenter = await userModel.findById(userId);
+    // Fetch data required by notification service
+    const [product, commenter] = await Promise.all([
+      productModel.findByProductId2(productId, null),
+      userModel.findById(userId)
+    ]);
     const seller = await userModel.findById(product.seller_id);
     const productUrl = `${req.protocol}://${req.get('host')}/products/detail?id=${productId}`;
 
-    // Check if the commenter is the seller (seller is replying)
+    // Fetch bidders + commenters only when the seller is broadcasting a reply
     const isSellerReplying = userId === product.seller_id;
-
+    let bidders = [], commenters = [];
     if (isSellerReplying && parentId) {
-      // Seller is replying to a question - notify all bidders and commenters
-      const bidders = await biddingHistoryModel.getUniqueBidders(productId);
-      const commenters = await productCommentModel.getUniqueCommenters(productId);
-
-      // Combine and remove duplicates (exclude seller)
-      const recipientsMap = new Map();
-      
-      bidders.forEach(b => {
-        if (b.id !== product.seller_id && b.email) {
-          recipientsMap.set(b.id, { email: b.email, fullname: b.fullname });
-        }
-      });
-      
-      commenters.forEach(c => {
-        if (c.id !== product.seller_id && c.email) {
-          recipientsMap.set(c.id, { email: c.email, fullname: c.fullname });
-        }
-      });
-
-      // Send email to each recipient
-      for (const [recipientId, recipient] of recipientsMap) {
-        try {
-          await sendMail({
-            to: recipient.email,
-            subject: `Seller answered a question on: ${product.name}`,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #667eea;">Seller Response on Product</h2>
-                <p>Dear <strong>${recipient.fullname}</strong>,</p>
-                <p>The seller has responded to a question on a product you're interested in:</p>
-                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                  <p><strong>Product:</strong> ${product.name}</p>
-                  <p><strong>Seller:</strong> ${seller.fullname}</p>
-                  <p><strong>Answer:</strong></p>
-                  <p style="background-color: white; padding: 15px; border-radius: 5px; border-left: 4px solid #667eea;">${content}</p>
-                </div>
-                <div style="text-align: center; margin: 30px 0;">
-                  <a href="${productUrl}" style="display: inline-block; background-color: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                    View Product
-                  </a>
-                </div>
-                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                <p style="color: #888; font-size: 12px;">This is an automated message from Online Auction. Please do not reply to this email.</p>
-              </div>
-            `
-          });
-        } catch (emailError) {
-          console.error(`Failed to send email to ${recipient.email}:`, emailError);
-        }
-      }
-      console.log(`Seller reply notification sent to ${recipientsMap.size} recipients`);
-    } else if (seller && seller.email && userId !== product.seller_id) {
-      // Non-seller commenting - send email to seller
-      if (parentId) {
-        // This is a reply - send "New Reply" email
-        await sendMail({
-          to: seller.email,
-          subject: `New reply on your product: ${product.name}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #667eea;">New Reply on Your Product</h2>
-              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                <p><strong>Product:</strong> ${product.name}</p>
-                <p><strong>From:</strong> ${commenter.fullname}</p>
-                <p><strong>Reply:</strong></p>
-                <p style="background-color: white; padding: 15px; border-radius: 5px;">${content}</p>
-              </div>
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${productUrl}" style="display: inline-block; background-color: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                  View Product & Reply
-                </a>
-              </div>
-            </div>
-          `
-        });
-      } else {
-        // This is a new question - send "New Question" email
-        await sendMail({
-          to: seller.email,
-          subject: `New question about your product: ${product.name}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #667eea;">New Question About Your Product</h2>
-              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                <p><strong>Product:</strong> ${product.name}</p>
-                <p><strong>From:</strong> ${commenter.fullname}</p>
-                <p><strong>Question:</strong></p>
-                <p style="background-color: white; padding: 15px; border-radius: 5px;">${content}</p>
-              </div>
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${productUrl}" style="display: inline-block; background-color: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                  View Product & Answer
-                </a>
-              </div>
-            </div>
-          `
-        });
-      }
+      [bidders, commenters] = await Promise.all([
+        biddingHistoryModel.getUniqueBidders(productId),
+        productCommentModel.getUniqueCommenters(productId)
+      ]);
     }
+
+    // Fire-and-forget: delegate all email logic to notification service
+    notificationService.sendCommentNotifications({
+      product, commenter, seller, content: content.trim(), parentId, userId, productUrl, bidders, commenters
+    });
 
     req.session.success_message = 'Comment posted successfully!';
     res.redirect(`/products/detail?id=${productId}`);
@@ -963,38 +394,7 @@ router.get('/bid-history/:productId', async (req, res) => {
     console.error('Get bid history error:', error);
     res.status(500).json({ success: false, message: 'Unable to load bidding history' });
   }
-  const result = await productModel.findByProductId(productId);
-  const relatedProducts = await productModel.findRelatedProducts(productId);
-  const product = {
-    thumbnail: result[0].thumbnail,
-    sub_images: result.reduce((acc, curr) => {
-      if (curr.img_link) {
-        acc.push(curr.img_link);
-      }
-      return acc;
-    }, []),
-    id: result[0].id,
-    name: result[0].name,
-    starting_price: result[0].starting_price,
-    current_price: result[0].current_price,
-    seller_id: result[0].seller_id,
-    seller_fullname: result[0].seller_name,
-    seller_rating: result[0].seller_rating_plus / (result[0].seller_rating_plus + result[0].seller_rating_minus),
-    seller_member_since: new Date(result[0].seller_created_at).getFullYear(),
-    buy_now_price: result[0].buy_now_price,
-    seller_id: result[0].seller_id,
-    hightest_bidder_id: result[0].highest_bidder_id,
-    bidder_name: result[0].bidder_name,
-    category_name: result[0].category_name,
-    bid_count: result[0].bid_count,
-    created_at: result[0].created_at,
-    end_at: result[0].end_at,
-    description: result[0].description,
-    related_products: relatedProducts
-  }
-  res.render('vwProduct/details', { product });
 });
-
 
 // ROUTE: REJECT BIDDER (POST) - Seller rejects a bidder from a product
 router.post('/reject-bidder', isAuthenticated, async (req, res) => {
@@ -1025,7 +425,7 @@ router.post('/reject-bidder', isAuthenticated, async (req, res) => {
       // Check product status - only allow rejection for ACTIVE products
       const now = new Date();
       const endDate = new Date(product.end_at);
-      
+
       if (product.is_sold !== null || endDate <= now || product.closed_at) {
         throw new Error('Can only reject bidders for active auctions');
       }
@@ -1044,7 +444,7 @@ router.post('/reject-bidder', isAuthenticated, async (req, res) => {
       rejectedBidderInfo = await trx('users')
         .where('id', bidderId)
         .first();
-      
+
       productInfo = product;
       sellerInfo = await trx('users')
         .where('id', sellerId)
@@ -1114,10 +514,10 @@ router.post('/reject-bidder', isAuthenticated, async (req, res) => {
         // Multiple bidders and rejected was highest - recalculate price
         const firstBidder = allAutoBids[0];
         const secondBidder = allAutoBids[1];
-        
+
         // Current price should be minimum to beat second highest
         let newPrice = secondBidder.max_price + product.step_price;
-        
+
         // But cannot exceed first bidder's max
         if (newPrice > firstBidder.max_price) {
           newPrice = firstBidder.max_price;
@@ -1190,9 +590,9 @@ router.post('/reject-bidder', isAuthenticated, async (req, res) => {
     res.json({ success: true, message: 'Bidder rejected successfully' });
   } catch (error) {
     console.error('Error rejecting bidder:', error);
-    res.status(400).json({ 
-      success: false, 
-      message: error.message || 'Failed to reject bidder' 
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Failed to reject bidder'
     });
   }
 });
@@ -1205,7 +605,7 @@ router.post('/unreject-bidder', isAuthenticated, async (req, res) => {
   try {
     // Verify product ownership
     const product = await productModel.findByProductId2(productId, sellerId);
-    
+
     if (!product) {
       throw new Error('Product not found');
     }
@@ -1217,7 +617,7 @@ router.post('/unreject-bidder', isAuthenticated, async (req, res) => {
     // Check product status - only allow unrejection for ACTIVE products
     const now = new Date();
     const endDate = new Date(product.end_at);
-    
+
     if (product.is_sold !== null || endDate <= now || product.closed_at) {
       throw new Error('Can only unreject bidders for active auctions');
     }
@@ -1228,9 +628,9 @@ router.post('/unreject-bidder', isAuthenticated, async (req, res) => {
     res.json({ success: true, message: 'Bidder can now bid on this product again' });
   } catch (error) {
     console.error('Error unrejecting bidder:', error);
-    res.status(400).json({ 
-      success: false, 
-      message: error.message || 'Failed to unreject bidder' 
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Failed to unreject bidder'
     });
   }
 });
@@ -1241,192 +641,18 @@ router.post('/buy-now', isAuthenticated, async (req, res) => {
   const userId = req.session.authUser.id;
 
   try {
-    await db.transaction(async (trx) => {
-      // 1. Get product information
-      const product = await trx('products')
-        .leftJoin('users as seller', 'products.seller_id', 'seller.id')
-        .where('products.id', productId)
-        .select('products.*', 'seller.fullname as seller_name')
-        .first();
-
-      if (!product) {
-        throw new Error('Product not found');
-      }
-
-      // 2. Check if user is the seller
-      if (product.seller_id === userId) {
-        throw new Error('Seller cannot buy their own product');
-      }
-
-      // 3. Check if product is still ACTIVE
-      const now = new Date();
-      const endDate = new Date(product.end_at);
-
-      if (product.is_sold !== null) {
-        throw new Error('Product is no longer available');
-      }
-
-      if (endDate <= now || product.closed_at) {
-        throw new Error('Auction has already ended');
-      }
-
-      // 4. Check if buy_now_price exists
-      if (!product.buy_now_price) {
-        throw new Error('Buy Now option is not available for this product');
-      }
-
-      const buyNowPrice = parseFloat(product.buy_now_price);
-
-      // 5. Check if bidder is rejected
-      const isRejected = await trx('rejected_bidders')
-        .where({ product_id: productId, bidder_id: userId })
-        .first();
-
-      if (isRejected) {
-        throw new Error('You have been rejected from bidding on this product');
-      }
-
-      // 6. Check if bidder is unrated and product doesn't allow unrated bidders
-      if (!product.allow_unrated_bidder) {
-        const bidder = await trx('users').where('id', userId).first();
-        const ratingData = await reviewModel.calculateRatingPoint(userId);
-        const ratingPoint = ratingData ? ratingData.rating_point : 0;
-        
-        if (ratingPoint === 0) {
-          throw new Error('This product does not allow bidders without ratings');
-        }
-      }
-
-      // 7. Close the auction immediately at buy now price
-      // Mark as buy_now_purchase to distinguish from regular bidding wins
-      await trx('products')
-        .where('id', productId)
-        .update({
-          current_price: buyNowPrice,
-          highest_bidder_id: userId,
-          highest_max_price: buyNowPrice,
-          end_at: now,
-          closed_at: now,
-          is_buy_now_purchase: true
-        });
-
-      // 8. Create bidding history record
-      // Mark this record as a Buy Now purchase (not a regular bid)
-      await trx('bidding_history').insert({
-        product_id: productId,
-        bidder_id: userId,
-        current_price: buyNowPrice,
-        is_buy_now: true
-      });
-
-      // Note: We do NOT insert into auto_bidding table for Buy Now purchases
-      // Reason: Buy Now is a direct purchase, not an auto bid. If we insert here,
-      // it could create inconsistency where another bidder has higher max_price 
-      // in auto_bidding table but this user is the highest_bidder in products table.
-      // The bidding_history record above is sufficient to track this purchase.
-    });
-
-    res.json({ 
-      success: true, 
+    await auctionService.executeBuyNow({ productId, userId });
+    res.json({
+      success: true,
       message: 'Congratulations! You have successfully purchased the product at Buy Now price. Please proceed to payment.',
       redirectUrl: `/products/complete-order?id=${productId}`
     });
-
   } catch (error) {
     console.error('Buy Now error:', error);
-    res.status(400).json({ 
-      success: false, 
-      message: error.message || 'Failed to purchase product' 
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Failed to purchase product'
     });
-  }
-});
-
-// ROUTE: Seller Ratings Page
-router.get('/seller/:sellerId/ratings', async (req, res) => {
-  try {
-    const sellerId = parseInt(req.params.sellerId);
-    
-    if (!sellerId) {
-      return res.redirect('/');
-    }
-    
-    // Get seller info
-    const seller = await userModel.findById(sellerId);
-    if (!seller) {
-      return res.redirect('/');
-    }
-    
-    // Get rating point
-    const ratingData = await reviewModel.calculateRatingPoint(sellerId);
-    const rating_point = ratingData ? ratingData.rating_point : 0;
-    
-    // Get all reviews
-    const reviews = await reviewModel.getReviewsByUserId(sellerId);
-    
-    // Calculate statistics
-    const totalReviews = reviews.length;
-    const positiveReviews = reviews.filter(r => r.rating === 1).length;
-    const negativeReviews = reviews.filter(r => r.rating === -1).length;
-    
-    res.render('vwProduct/seller-ratings', {
-      sellerName: seller.fullname,
-      rating_point,
-      totalReviews,
-      positiveReviews,
-      negativeReviews,
-      reviews
-    });
-    
-  } catch (error) {
-    console.error('Error loading seller ratings page:', error);
-    res.redirect('/');
-  }
-});
-
-// ROUTE: Bidder Ratings Page
-router.get('/bidder/:bidderId/ratings', async (req, res) => {
-  try {
-    const bidderId = parseInt(req.params.bidderId);
-    
-    if (!bidderId) {
-      return res.redirect('/');
-    }
-    
-    // Get bidder info
-    const bidder = await userModel.findById(bidderId);
-    if (!bidder) {
-      return res.redirect('/');
-    }
-    
-    // Get rating point
-    const ratingData = await reviewModel.calculateRatingPoint(bidderId);
-    const rating_point = ratingData ? ratingData.rating_point : 0;
-    
-    // Get all reviews
-    const reviews = await reviewModel.getReviewsByUserId(bidderId);
-    
-    // Calculate statistics
-    const totalReviews = reviews.length;
-    const positiveReviews = reviews.filter(r => r.rating === 1).length;
-    const negativeReviews = reviews.filter(r => r.rating === -1).length;
-    
-    // Mask bidder name
-    const maskedName = bidder.fullname ? bidder.fullname.split('').map((char, index) => 
-      index % 2 === 0 ? char : '*'
-    ).join('') : '';
-    
-    res.render('vwProduct/bidder-ratings', {
-      bidderName: maskedName,
-      rating_point,
-      totalReviews,
-      positiveReviews,
-      negativeReviews,
-      reviews
-    });
-    
-  } catch (error) {
-    console.error('Error loading bidder ratings page:', error);
-    res.redirect('/');
   }
 });
 

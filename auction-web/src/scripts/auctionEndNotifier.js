@@ -44,10 +44,10 @@ export async function checkAndNotifyEndedAuctions() {
  */
 export function startAuctionEndNotifier(intervalSeconds = 30) {
   console.log(`🚀 Auction End Notifier started (checking every ${intervalSeconds} second(s))`);
-  
+
   // Chạy ngay lần đầu
   checkAndNotifyEndedAuctions();
-  
+
   // Sau đó chạy định kỳ
   setInterval(checkAndNotifyEndedAuctions, intervalSeconds * 1000);
 }
