@@ -95,6 +95,247 @@
   \tableofcontents
 \end{frame}
 
-% \input{sections/01_section1.tex}
+% =========================================================
+% SECTION: Refactoring Auction State Logic
+% Issues #2, #6, #14 — auction-state.js
+% =========================================================
+\section{Phân tích \& Refactoring: Auction State Logic}
+
+% ----------------------------------------------------------
+% ISSUE #2 — Slide 1: Problem
+% ----------------------------------------------------------
+\begin{frame}{Issue \#2 — Vi phạm DRY: Duplicate \texttt{productStatus} Logic}
+  \textbf{Vấn đề:} Khối logic xác định trạng thái auction được copy nguyên vẹn
+  vào 2 route handler khác nhau.
+
+  \bigskip
+  \textbf{Nguyên tắc vi phạm:} \alert{DRY} (Don't Repeat Yourself)
+
+  \bigskip
+  \begin{block}{Business rule bị encode 2 lần}
+    \begin{itemize}
+      \item \texttt{GET /detail} → 5-nhánh if/else (dòng $\sim$162)
+      \item \texttt{GET /complete-order} → 4-nhánh if/else (dòng $\sim$984)
+      \item Hai bản đã \textbf{drift}: bản thứ hai thiếu nhánh \texttt{ACTIVE} cuối
+    \end{itemize}
+  \end{block}
+
+  \bigskip
+  \textbf{Rủi ro kỹ thuật:}
+  \begin{itemize}
+    \item Thêm state \texttt{DISPUTED} → phải sửa \textbf{cả hai chỗ}; nếu quên một, hai route trả kết quả mâu thuẫn nhau với cùng một product
+    \item Không có unit nào để test — logic embedded sâu trong HTTP handler
+    \item Business rule bị coupled với HTTP routing layer
+  \end{itemize}
+\end{frame}
+
+% ----------------------------------------------------------
+% ISSUE #2 — Slide 2: Solution
+% ----------------------------------------------------------
+\begin{frame}[fragile]{Issue \#2 — Refactoring: Extract \texttt{resolveAuctionStatus()}}
+  \textbf{Chiến lược:} Extract Function → đưa về \texttt{services/auction/auction-state.js}
+
+  \begin{columns}[t]
+    \column{0.48\textwidth}
+    \textbf{\alert{Trước}} — inline, lặp lại:
+    \footnotesize
+    \begin{verbatim}
+// Cùng khối xuất hiện 2 lần
+const now = new Date();
+const end = new Date(product.end_at);
+let status = 'ACTIVE';
+if (product.is_sold === true)
+  status = 'SOLD';
+else if (...)
+  status = 'CANCELLED';
+// ... 3 nhánh nữa
+    \end{verbatim}
+
+    \column{0.48\textwidth}
+    \textbf{\textcolor{mygreen}{Sau}} — một hàm duy nhất:
+    \footnotesize
+    \begin{verbatim}
+// auction-state.js
+export function
+  resolveAuctionStatus(product) {
+  if (product.is_sold === true)
+    return 'SOLD';
+  if (product.is_sold === false)
+    return 'CANCELLED';
+  // ...
+  return 'ACTIVE';
+}
+
+// Trong route handler:
+const status =
+  resolveAuctionStatus(product);
+    \end{verbatim}
+  \end{columns}
+
+  \bigskip
+  \textbf{Kết quả:} Pure function, zero dependency, test được bằng \texttt{assert(resolveAuctionStatus(mockProduct) === 'PENDING')}
+\end{frame}
+
+% ----------------------------------------------------------
+% ISSUE #6 — Slide 1: Problem
+% ----------------------------------------------------------
+\begin{frame}{Issue \#6 — Vi phạm OCP: State Taxonomy Không Tập Trung}
+  \textbf{Vấn đề:} Logic phân loại state auction được viết trực tiếp trong route handlers dưới dạng if/else inline — không có module "đóng" bảo vệ core logic.
+
+  \bigskip
+  \textbf{Nguyên tắc vi phạm:} \alert{OCP} (Open/Closed Principle)
+
+  \bigskip
+  \begin{alertblock}{Phân biệt quan trọng}
+    Guard condition (\texttt{if (!product) return 404}) \textbf{không} phải OCP violation.\\
+    State classification (\texttt{if (...) status = 'PENDING'}) \textbf{là} OCP violation — đây là \emph{trục mở rộng domain}.
+  \end{alertblock}
+
+  \bigskip
+  \textbf{Hậu quả khi thêm state \texttt{PAUSED}:}
+  \begin{itemize}
+    \item Phải \textbf{mở (modify)} code đang chạy trong production ở nhiều file
+    \item Không có "điểm mở rộng" định nghĩa sẵn — developer phải grep toàn codebase
+    \item Mỗi file có thể implement logic mở rộng theo cách khác nhau → inconsistency
+  \end{itemize}
+\end{frame}
+
+% ----------------------------------------------------------
+% ISSUE #6 — Slide 2: Solution
+% ----------------------------------------------------------
+\begin{frame}{Issue \#6 — Refactoring: Encapsulate Variation (State Module)}
+  \textbf{Chiến lược:} Tập trung toàn bộ state taxonomy vào một module duy nhất.\\
+  Module này \textbf{đóng} với modification, \textbf{mở} cho extension.
+
+  \bigskip
+  \begin{block}{\texttt{auction-state.js} — Single Point of Extension}
+    \begin{itemize}
+      \item \texttt{resolveAuctionStatus(product)} → trả về state string
+      \item \texttt{canBid(status)} → guard function
+      \item \texttt{canAccessOrder(status)} → guard function
+      \item \texttt{requiresAccessCheck(status)} → guard function
+    \end{itemize}
+  \end{block}
+
+  \bigskip
+  \textbf{Thêm state \texttt{PAUSED} sau refactor:}
+  \begin{enumerate}
+    \item Thêm 1 điều kiện vào \texttt{resolveAuctionStatus()} trong \texttt{auction-state.js}
+    \item Thêm guard function \texttt{isPaused(status)} nếu cần
+    \item \textbf{Không sửa} bất kỳ route handler hay notifier nào
+  \end{enumerate}
+
+  \bigskip
+  \textbf{Pattern áp dụng:} \emph{Encapsulate Variation} — mọi variation của "state" sống trong một module. Caller chỉ nhận kết quả, không biết logic phân loại.
+\end{frame}
+
+% ----------------------------------------------------------
+% ISSUE #14 — Slide 1: Problem
+% ----------------------------------------------------------
+\begin{frame}{Issue \#14 — Vi phạm DRY: \texttt{auctionEndNotifier} Tự Tính State}
+  \textbf{Vấn đề:} \texttt{auctionEndNotifier.js} — module chạy độc lập — tự encode business rule về auction state theo cách riêng, tạo ra \textbf{nguồn sự thật thứ ba}.
+
+  \bigskip
+  \textbf{Nguyên tắc vi phạm:} \alert{DRY} ở cấp \emph{cross-module knowledge duplication}
+
+  \bigskip
+  \begin{block}{Ba nguồn sự thật trong cùng một hệ thống}
+    \begin{itemize}
+      \item \texttt{GET /detail}: 5-nhánh if/else (kiểm tra \texttt{is\_sold} + \texttt{highest\_bidder\_id})
+      \item \texttt{GET /complete-order}: 4-nhánh if/else (đã drift)
+      \item \texttt{auctionEndNotifier.js}: \texttt{if (auction.highest\_bidder\_id)} — 2-nhánh, \textbf{không kiểm tra \texttt{is\_sold}}
+    \end{itemize}
+  \end{block}
+
+  \bigskip
+  \textbf{Bug tiềm ẩn:} Product đã SOLD vẫn có \texttt{highest\_bidder\_id} $\neq$ null.\\
+  Nếu query trả về SOLD product, notifier sẽ gửi email ``Bạn đã thắng đấu giá!'' cho một giao dịch đã hoàn tất từ trước.
+\end{frame}
+
+% ----------------------------------------------------------
+% ISSUE #14 — Slide 2: Solution
+% ----------------------------------------------------------
+\begin{frame}[fragile]{Issue \#14 — Refactoring: Notifier Depend vào \texttt{auction-state.js}}
+  \textbf{Chiến lược:} Notifier không tự tính state — import và dùng \texttt{resolveAuctionStatus()}.
+
+  \begin{columns}[t]
+    \column{0.46\textwidth}
+    \textbf{\alert{Trước}} — implicit, thiếu check:
+    \footnotesize
+    \begin{verbatim}
+// implicit state check, 2 nhánh
+// không check is_sold
+if (auction.highest_bidder_id) {
+  await sendMail(winner, ...);
+  await sendMail(seller, ...);
+} else {
+  await sendMail(seller, ...);
+}
+    \end{verbatim}
+
+    \column{0.50\textwidth}
+    \textbf{\textcolor{mygreen}{Sau}} — explicit, đúng rule:
+    \footnotesize
+    \begin{verbatim}
+import { resolveAuctionStatus }
+  from '../services/auction/
+         auction-state.js';
+
+const status =
+  resolveAuctionStatus(auction);
+
+if (status === 'PENDING') {
+  await notifyWinner(auction);
+  await notifySeller(auction);
+} else if (status === 'EXPIRED') {
+  await notifySellerNoBid(auction);
+}
+// SOLD/CANCELLED: không gửi email
+    \end{verbatim}
+  \end{columns}
+
+  \bigskip
+  \textbf{Key Takeaway:}
+  \begin{itemize}
+    \item \textbf{Single Source of Truth}: thay đổi rule tại 1 nơi, propagate toàn hệ thống
+    \item \textbf{Dependency on Abstraction}: notifier depend vào function contract, không depend vào raw DB fields
+  \end{itemize}
+\end{frame}
+
+% ----------------------------------------------------------
+% Summary Slide
+% ----------------------------------------------------------
+\begin{frame}{Tổng Kết: Ba Issues, Một Giải Pháp}
+  \begin{block}{Root Cause chung}
+    Không có \emph{single source of truth} cho auction state logic.\\
+    Issues \#2, \#6, \#14 là cùng một vấn đề nhìn từ ba góc độ khác nhau.
+  \end{block}
+
+  \bigskip
+  \begin{columns}[t]
+    \column{0.48\textwidth}
+    \textbf{Trước refactor:}
+    \begin{itemize}
+      \item 3 nơi encode cùng 1 rule
+      \item Drift đã xảy ra giữa các bản sao
+      \item Không thể unit test
+      \item Thêm state → sửa $\geq 3$ file
+    \end{itemize}
+
+    \column{0.48\textwidth}
+    \textbf{Sau refactor:}
+    \begin{itemize}
+      \item 1 module: \texttt{auction-state.js}
+      \item Pure function, zero infrastructure dependency
+      \item Test: \texttt{resolveAuctionStatus(mock)} trực tiếp
+      \item Thêm state → sửa \textbf{1 file}
+    \end{itemize}
+  \end{columns}
+
+  \bigskip
+  \begin{center}
+    \textit{``Don't repeat yourself'' không chỉ về code — về \textbf{knowledge}: mỗi business rule chỉ nên tồn tại tại một nơi duy nhất trong hệ thống.}
+  \end{center}
+\end{frame}
 
 \end{document}

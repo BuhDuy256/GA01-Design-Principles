@@ -5,6 +5,7 @@
 
 import * as productModel from '../models/product.model.js';
 import { sendMail } from '../utils/mailer.js';
+import { resolveAuctionStatus } from '../services/auction/auction-state.js';
 
 /**
  * Kiểm tra các đấu giá kết thúc và gửi email thông báo
@@ -12,7 +13,7 @@ import { sendMail } from '../utils/mailer.js';
 export async function checkAndNotifyEndedAuctions() {
   try {
     const endedAuctions = await productModel.getNewlyEndedAuctions();
-    
+
     if (endedAuctions.length === 0) {
       return;
     }
@@ -22,9 +23,10 @@ export async function checkAndNotifyEndedAuctions() {
     for (const auction of endedAuctions) {
       try {
         const productUrl = `${process.env.BASE_URL || 'http://localhost:3005'}/products/detail?id=${auction.id}`;
-        
-        // Có người thắng
-        if (auction.highest_bidder_id) {
+        const auctionStatus = resolveAuctionStatus(auction);
+
+        // Có người thắng (PENDING state)
+        if (auctionStatus === 'PENDING') {
           // Gửi email cho người thắng
           if (auction.winner_email) {
             await sendMail({
@@ -94,7 +96,7 @@ export async function checkAndNotifyEndedAuctions() {
             });
             console.log(`✅ Seller notification sent to ${auction.seller_email} for product #${auction.id}`);
           }
-        } else {
+        } else if (auctionStatus === 'EXPIRED') {
           // Không có người thắng - Chỉ thông báo cho người bán
           if (auction.seller_email) {
             await sendMail({
@@ -147,10 +149,10 @@ export async function checkAndNotifyEndedAuctions() {
  */
 export function startAuctionEndNotifier(intervalSeconds = 30) {
   console.log(`🚀 Auction End Notifier started (checking every ${intervalSeconds} second(s))`);
-  
+
   // Chạy ngay lần đầu
   checkAndNotifyEndedAuctions();
-  
+
   // Sau đó chạy định kỳ
   setInterval(checkAndNotifyEndedAuctions, intervalSeconds * 1000);
 }
