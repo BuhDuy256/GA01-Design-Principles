@@ -278,3 +278,4 @@ export async function sendBidNotifications({ result, productId, productUrl }) {
   } catch (emailError) {
     console.error('Failed to send bid notification emails:', emailError);
   }
+}

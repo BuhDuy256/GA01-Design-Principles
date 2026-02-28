@@ -1086,4 +1086,132 @@ await sendAuctionEndedNotifications(
   \end{block}
 \end{frame}
 
+% =========================================================
+% SECTION: HTTP Layer Cleanup — Route Decomposition
+% Issues #1, #3, #13
+% =========================================================
+\section{Refactoring: Issues \#1, \#3, \#13 — Route Decomposition}
+
+% ----------------------------------------------------------
+% ISSUE #1,#3,#13 — Slide 1: Problem
+% ----------------------------------------------------------
+\begin{frame}{Issues \#1, \#3, \#13 — SRP: Monolithic Route File (1090 dòng)}
+
+  \textbf{Vấn đề:} Một file \texttt{product.route.js} duy nhất chứa ba domain hoàn toàn khác nhau.
+
+  \bigskip
+  \begin{block}{Ba domain trong một file — ba lý do để thay đổi}
+    \begin{columns}[t]
+      \column{0.31\textwidth}
+      \textbf{Auction domain}
+      \begin{itemize}
+        \small
+        \item \texttt{GET /category}
+        \item \texttt{GET /detail}
+        \item \texttt{POST /bid}
+        \item \texttt{POST /buy-now}
+        \item \texttt{POST /reject-bidder}
+        \item \textit{...}
+      \end{itemize}
+
+      \column{0.36\textwidth}
+      \textbf{Order domain}
+      \begin{itemize}
+        \small
+        \item \texttt{GET /complete-order}
+        \item \texttt{POST /order/:id/submit-payment}
+        \item \texttt{POST /order/:id/confirm-payment}
+        \item \texttt{POST /order/:id/submit-shipping}
+        \item \texttt{POST /order/:id/send-message}
+        \item \textit{...10 routes}
+      \end{itemize}
+
+      \column{0.30\textwidth}
+      \textbf{Rating domain}
+      \begin{itemize}
+        \small
+        \item \texttt{GET /seller/:id/ratings}
+        \item \texttt{GET /bidder/:id/ratings}
+      \end{itemize}
+    \end{columns}
+  \end{block}
+
+  \medskip
+  \begin{alertblock}{SRP Violation + ISP Violation}
+    Import block chứa \textbf{24 dependencies}: \texttt{orderModel}, \texttt{invoiceModel},
+    \texttt{orderChatModel}, \texttt{multer}, \texttt{path}, \texttt{reviewModel},
+    \texttt{orderService}... — một developer sửa \texttt{POST /bid}
+    phải navigate qua toàn bộ order payment implementation.
+  \end{alertblock}
+
+  \medskip
+  \textbf{Hậu quả thực tế:}
+  \begin{itemize}
+    \item Merge conflict: developer A (order payment) và B (auction bidding) đều chỉnh cùng 1 file
+    \item 1090-line file — không có file-level signal về domain ownership
+    \item Thêm order endpoint mới: sửa file vốn là \textit{product} router
+  \end{itemize}
+\end{frame}
+
+% ----------------------------------------------------------
+% ISSUE #1,#3,#13 — Slide 2: Solution
+% ----------------------------------------------------------
+\begin{frame}[fragile]{Issues \#1, \#3, \#13 — Refactoring: Tách Route Theo Domain}
+
+  \textbf{Chiến lược:} Mỗi router file = 1 domain. Mount tất cả tại \texttt{/products} —
+  \textbf{không thay đổi URL}, không thay đổi API contract.
+
+  \begin{columns}[t]
+    \column{0.44\textwidth}
+    \textbf{\alert{Trước}} — 1 file, 3 domain:
+    \footnotesize
+    \begin{verbatim}
+routes/
+└── product.route.js  ← 1090 lines
+    // auction/product routes
+    // order payment routes
+    // order chat routes
+    // rating pages
+    // 24 imports mixed
+
+// index.js
+app.use('/products', productRouter);
+    \end{verbatim}
+
+    \column{0.52\textwidth}
+    \textbf{\textcolor{mygreen}{Sau}} — 3 files, 1 domain each:
+    \footnotesize
+    \begin{verbatim}
+routes/
+├── product.route.js  ← 743 lines
+│   // auction + bidding
+│   // watchlist, comments
+│   // reject/buy-now
+├── order.route.js    ← NEW
+│   // complete-order page
+│   // payment, shipping, delivery
+│   // rating submit + chat
+└── rating.route.js   ← NEW
+    // seller ratings page
+    // bidder ratings page
+
+// index.js
+app.use('/products', productRouter);
+app.use('/products', orderRouter);
+app.use('/products', ratingRouter);
+    \end{verbatim}
+  \end{columns}
+
+  \begin{block}{Kết quả \& Key Takeaways}
+    \begin{itemize}
+      \item \textbf{SRP}: Mỗi file có \textbf{1} lý do để thay đổi — domain boundary rõ ràng
+      \item \textbf{0 thay đổi URL}: Client code không cần chỉnh sửa — backward compatible hoàn toàn
+      \item \texttt{product.route.js}: \textbf{1090 $\to$ 743 dòng} ($-$32\%), \textbf{24 $\to$ 18 imports} ($-$6)
+      \item Merge conflict bị loại bỏ: order developer và auction developer own file riêng biệt
+      \item File name = domain name: \texttt{order.route.js} signals \textit{exactly} what it contains
+    \end{itemize}
+  \end{block}
+\end{frame}
+
 \end{document}
+
