@@ -14,6 +14,7 @@ const mockKnex = {
   update: jest.fn().mockReturnThis(),
   andWhere: jest.fn().mockReturnThis(),
   select: jest.fn().mockReturnThis(),
+  del: jest.fn().mockReturnThis(),
 };
 const dbFn = jest.fn(() => mockKnex);
 dbFn.fn = { now: jest.fn().mockReturnValue("NOW()") };
@@ -95,5 +96,46 @@ describe("Unit Tests: user.model.js", () => {
     });
   });
 
+  describe("Admin User Management (Flow 8)", () => {
+    test("UT-ADM-USR-01: loadAllUsers() should return an array of users ordered by id desc", async () => {
+      mockKnex.orderBy.mockResolvedValueOnce([{ id: 1, email: "test@example.com" }]);
+      const result = await userModel.loadAllUsers();
+      expect(dbFn).toHaveBeenCalledWith("users");
+      expect(mockKnex.orderBy).toHaveBeenCalledWith("id", "desc");
+      expect(result).toEqual([{ id: 1, email: "test@example.com" }]);
+    });
+
+    test("UT-ADM-USR-02: findById(id) should return a user by their ID", async () => {
+      mockKnex.first.mockResolvedValueOnce({ id: 10, email: "findme@example.com" });
+      const result = await userModel.findById(10);
+      expect(dbFn).toHaveBeenCalledWith("users");
+      expect(mockKnex.where).toHaveBeenCalledWith("id", 10);
+      expect(mockKnex.first).toHaveBeenCalled();
+      expect(result).toEqual({ id: 10, email: "findme@example.com" });
+    });
+
+    test("UT-ADM-USR-04: update(id, data) should update an existing user", async () => {
+      const updateData = { fullname: "Updated Name" };
+      mockKnex.returning.mockResolvedValueOnce([{ id: 1, fullname: "Updated Name" }]);
+      
+      const result = await userModel.update(1, updateData);
+      
+      expect(dbFn).toHaveBeenCalledWith("users");
+      expect(mockKnex.where).toHaveBeenCalledWith("id", 1);
+      expect(mockKnex.update).toHaveBeenCalledWith(updateData);
+      expect(result).toEqual({ id: 1, fullname: "Updated Name" });
+    });
+
+    test("UT-ADM-USR-05: deleteUser(id) should remove a user", async () => {
+      mockKnex.del.mockResolvedValueOnce(1);
+      
+      const result = await userModel.deleteUser(99);
+      
+      expect(dbFn).toHaveBeenCalledWith("users");
+      expect(mockKnex.where).toHaveBeenCalledWith("id", 99);
+      expect(mockKnex.del).toHaveBeenCalled();
+      expect(result).toBe(1);
+    });
+  });
 
 });

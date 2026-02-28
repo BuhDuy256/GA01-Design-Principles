@@ -99,3 +99,53 @@ describe("Integration Tests: /admin/users/upgrade/*", () => {
     expect(mockUpgradeService.rejectUpgradeRequest).toHaveBeenCalledWith(99, "not qualified");
   });
 });
+
+describe("Integration Tests: /admin/users/* (Admin CRUD - Flow 8)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("IT-ADM-USR-01: GET /list admin viewing user list", async () => {
+    const mockUsers = [{ id: 1, fullname: "Test" }];
+    mockUserModel.loadAllUsers.mockResolvedValueOnce(mockUsers);
+
+    const response = await request(app).get("/admin/users/list");
+    expect(response.status).toBe(200);
+    expect(response.body.view).toBe("vwAdmin/users/list");
+    expect(response.body.options.users).toEqual(mockUsers);
+  });
+
+  test("IT-ADM-USR-03: POST /edit updates a user", async () => {
+    mockUserModel.update.mockResolvedValueOnce();
+
+    const response = await request(app).post("/admin/users/edit").send({
+      id: 1, fullname: "Updated", email: "test@example.com"
+    });
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe("/admin/users/list");
+    expect(mockUserModel.update).toHaveBeenCalled();
+  });
+
+  test("IT-ADM-USR-04: POST /reset-password resets password and sends email", async () => {
+    mockUserModel.findById.mockResolvedValueOnce({ id: 1, email: "test@example.com", fullname: "Test" });
+    mockUserModel.update.mockResolvedValueOnce();
+
+    const response = await request(app).post("/admin/users/reset-password").send({ id: 1 });
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe("/admin/users/list");
+    expect(mockUserModel.update).toHaveBeenCalled();
+    expect(mockMailer.sendMail).toHaveBeenCalled();
+  });
+
+  test("IT-ADM-USR-05: POST /delete removes a user", async () => {
+    mockUserModel.deleteUser.mockResolvedValueOnce();
+
+    const response = await request(app).post("/admin/users/delete").send({ id: 1 });
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe("/admin/users/list");
+    expect(mockUserModel.deleteUser).toHaveBeenCalledWith(1);
+  });
+});
