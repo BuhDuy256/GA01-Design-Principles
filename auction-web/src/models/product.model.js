@@ -834,3 +834,12 @@ export async function markEndNotificationSent(productId) {
       end_notification_sent: new Date()
     });
 }
+
+export const markProductAsSold = async (productId) => {
+    return db('products')
+        .where('id', productId)
+        .update({ 
+            is_sold: true,
+            closed_at: new Date()
+        });
+};

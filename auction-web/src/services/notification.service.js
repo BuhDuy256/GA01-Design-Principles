@@ -32,3 +32,40 @@ export const notifyUsersAboutDescriptionUpdate = async (product, description, se
         }).catch(err => console.error('Failed to send email to', user.email, err));
     })).catch(err => console.error('Email notification error:', err));
 };
+
+
+
+
+export const notifyAuctionResult = async (auction, productUrl) => {
+    if (auction.highest_bidder_id) {
+        // 1. Gửi cho người thắng
+        if (auction.winner_email) {
+            await sendMail({
+                to: auction.winner_email,
+                subject: `🎉 Congratulations! You won the auction: ${auction.name}`,
+                html: emailTemplates.getWinnerEmailHtml(auction, productUrl)
+            });
+            console.log(`Winner notification sent to ${auction.winner_email}`);
+        }
+        
+        // 2. Gửi cho người bán (thành công)
+        if (auction.seller_email) {
+            await sendMail({
+                to: auction.seller_email,
+                subject: `🔔 Auction Ended: ${auction.name} - Winner Found!`,
+                html: emailTemplates.getSellerSuccessHtml(auction, productUrl)
+            });
+            console.log(`Seller notification sent to ${auction.seller_email}`);
+        }
+    } else {
+        // 3. Gửi cho người bán (thất bại, không có người đấu giá)
+        if (auction.seller_email) {
+            await sendMail({
+                to: auction.seller_email,
+                subject: `🔔 Auction Ended: ${auction.name} - No Bidders`,
+                html: emailTemplates.getSellerNoBidderHtml(auction)
+            });
+            console.log(`Seller notification (no bidders) sent to ${auction.seller_email}`);
+        }
+    }
+};
