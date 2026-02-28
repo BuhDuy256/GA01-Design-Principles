@@ -6,6 +6,7 @@
 import * as productModel from '../models/product.model.js';
 import { sendMail } from '../utils/mailer.js';
 import { resolveAuctionStatus } from '../services/auction/auction-state.js';
+import { createOrderFromAuction } from '../services/order.service.js';
 
 /**
  * Kiểm tra các đấu giá kết thúc và gửi email thông báo
@@ -27,6 +28,16 @@ export async function checkAndNotifyEndedAuctions() {
 
         // Có người thắng (PENDING state)
         if (auctionStatus === 'PENDING') {
+          // Domain transition: time-based expiry path.
+          // Create Order immediately so buyers can access /complete-order without race conditions.
+          // createOrderFromAuction is idempotent — safe to call here even if already created.
+          await createOrderFromAuction({
+            productId: auction.id,
+            buyerId: auction.highest_bidder_id,
+            sellerId: auction.seller_id,
+            finalPrice: auction.current_price
+          });
+
           // Gửi email cho người thắng
           if (auction.winner_email) {
             await sendMail({

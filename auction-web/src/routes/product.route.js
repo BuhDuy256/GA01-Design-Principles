@@ -17,6 +17,7 @@ import { isAuthenticated } from '../middlewares/auth.mdw.js';
 import { resolveAuctionStatus } from '../services/auction/auction-state.js';
 import * as auctionService from '../services/auction/auction.service.js';
 import { buildBidResponseMessage } from '../services/auction/bid-engine.js';
+import * as orderService from '../services/order.service.js';
 import { sendMail } from '../utils/mailer.js';
 import db from '../utils/db.js';
 import multer from 'multer';
@@ -516,19 +517,15 @@ router.get('/complete-order', isAuthenticated, async (req, res) => {
   }
 
   // Fetch or create order
-  let order = await orderModel.findByProductId(productId);
-
-  if (!order) {
-    // Auto-create order if not exists (trigger should handle this, but fallback)
-    const orderData = {
-      product_id: productId,
-      buyer_id: product.highest_bidder_id,
-      seller_id: product.seller_id,
-      final_price: product.current_price || product.highest_bid || 0
-    };
-    await orderModel.createOrder(orderData);
-    order = await orderModel.findByProductId(productId);
-  }
+  // Order should already exist — created at auction transition time by auction.service
+  // or auctionEndNotifier. The call below is an idempotent safeguard for the scheduler
+  // race window (auction just ended seconds before the notifier next runs).
+  let order = await orderService.createOrderFromAuction({
+    productId,
+    buyerId: product.highest_bidder_id,
+    sellerId: product.seller_id,
+    finalPrice: product.current_price || product.highest_bid || 0
+  });
 
   // Fetch invoices
   let paymentInvoice = await invoiceModel.getPaymentInvoice(order.id);

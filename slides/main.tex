@@ -823,4 +823,119 @@ await db.transaction(async (trx) => {
   \end{center}
 \end{frame}
 
+% =========================================================
+% SECTION: Domain Boundary — Order Creation Timing
+% Issue #9
+% =========================================================
+\section{Refactoring: Issue \#9 — Domain Boundary \& Order Creation Timing}
+
+% ----------------------------------------------------------
+% ISSUE #9 — Slide 1: Problem
+% ----------------------------------------------------------
+\begin{frame}{Issue \#9 — SRP + DIP: Order Được Tạo Sai Nơi \& Sai Lúc}
+
+  \textbf{Vấn đề:} Order entity chỉ được tạo \textbf{lazily} khi user navigate tới
+  \texttt{GET /complete-order} — không phải tại thời điểm auction kết thúc.
+
+  \bigskip
+  \textbf{Nguyên tắc vi phạm:} \alert{SRP} + \alert{DIP}
+
+  \bigskip
+  \begin{block}{Ba code path kết thúc auction — không path nào tạo Order}
+    \begin{itemize}
+      \item \texttt{executeBuyNow()} → đóng auction, \textbf{không tạo Order}
+      \item \texttt{placeBid()} khi buy-now triggered → đóng auction, \textbf{không tạo Order}
+      \item \texttt{auctionEndNotifier.js} khi hết hạn → gửi email, \textbf{không tạo Order}
+    \end{itemize}
+  \end{block}
+
+  \medskip
+  \begin{alertblock}{SRP Violation: GET handler có write side effect}
+    \texttt{GET /complete-order} chứa inline \texttt{orderModel.createOrder()} —
+    biến một read operation thành một entity-creation operation.
+    HTTP GET là non-idempotent: \textbf{nếu user không bao giờ truy cập URL này,
+    Order không bao giờ được tạo.}
+  \end{alertblock}
+
+  \medskip
+  \textbf{Hậu quả:}
+  \begin{itemize}
+    \item Silent data loss: seller hoàn thành giao dịch nhưng không có Order record
+    \item \texttt{GET /complete-order} phụ thuộc vào \texttt{orderModel} concrete class (DIP violation)
+    \item Không thể test route render mà không vô tình trigger DB write
+    \item Inconsistency: buy-now và bid-win tạo Order theo timing khác nhau
+  \end{itemize}
+\end{frame}
+
+% ----------------------------------------------------------
+% ISSUE #9 — Slide 2: Solution
+% ----------------------------------------------------------
+\begin{frame}[fragile]{Issue \#9 — Refactoring: \texttt{order.service.js} + Đúng Timing}
+
+  \textbf{Chiến lược:} Tạo Order \textbf{tại thời điểm auction transition sang PENDING} —
+  không phụ thuộc vào route nào user visit. Idempotent để tránh duplicate.
+
+  \begin{columns}[t]
+    \column{0.46\textwidth}
+    \textbf{\alert{Trước}} — lazy, fragile:
+    \footnotesize
+    \begin{verbatim}
+// GET /complete-order (route handler)
+let order =
+  await orderModel.findByProductId(...);
+if (!order) {
+  // Business logic in HTTP layer!
+  await orderModel.createOrder({
+    product_id, buyer_id,
+    seller_id, final_price
+  });
+  order =
+    await orderModel.findByProductId(...);
+}
+    \end{verbatim}
+
+    \column{0.50\textwidth}
+    \textbf{\textcolor{mygreen}{Sau}} — domain-driven, idempotent:
+    \footnotesize
+    \begin{verbatim}
+// order.service.js (NEW)
+export async function
+  createOrderFromAuction(
+    { productId, buyerId,
+      sellerId, finalPrice }) {
+  const existing = await
+    orderModel.findByProductId(productId);
+  if (existing) return existing; // ← guard
+
+  return orderModel.createOrder({ ... });
+}
+
+// auction.service.js — placeBid()
+if (result.productSold) {
+  await createOrderFromAuction({ ... });
+}
+
+// auctionEndNotifier.js
+if (status === 'PENDING') {
+  await createOrderFromAuction({ ... });
+  await sendMail(winner, ...);
+}
+    \end{verbatim}
+  \end{columns}
+
+  \medskip
+  \begin{block}{Domain Invariant mới được enforced}
+    \textit{``Mỗi auction vào PENDING state \(\Rightarrow\) tồn tại đúng 1 Order, được tạo ngay tại thời điểm transition, bởi Auction domain — không phải bởi HTTP route.''}
+  \end{block}
+
+  \medskip
+  \textbf{Key Takeaway:}
+  \begin{itemize}
+    \item \textbf{SRP}: GET /complete-order chỉ còn là read route — không write DB
+    \item \textbf{DIP}: Route phụ thuộc vào \texttt{orderService} abstraction, không \texttt{orderModel}
+    \item \textbf{Idempotency} guard ngăn duplicate Order dù scheduler chạy chồng
+    \item \textbf{Domain boundary} rõ ràng: Auction domain tạo Order, Order domain quản lý lifecycle
+  \end{itemize}
+\end{frame}
+
 \end{document}

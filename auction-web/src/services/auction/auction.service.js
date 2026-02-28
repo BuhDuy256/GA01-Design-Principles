@@ -25,6 +25,7 @@ import { sendMail } from '../../utils/mailer.js';
 import * as reviewModel from '../../models/review.model.js';
 import * as systemSettingModel from '../../models/systemSetting.model.js';
 import * as userModel from '../../models/user.model.js';
+import { createOrderFromAuction } from '../order.service.js';
 import {
   validateBidEligibility,
   validateBidAmount,
@@ -45,7 +46,7 @@ import {
  * @returns {Promise<object>} Bid result (used by route to build response + send emails)
  */
 export async function placeBid({ productId, userId, bidAmount }) {
-  return db.transaction(async (trx) => {
+  const result = await db.transaction(async (trx) => {
     // 1. Lock product row (prevents concurrent bid races)
     const product = await trx('products')
       .where('id', productId)
@@ -150,6 +151,20 @@ export async function placeBid({ productId, userId, bidAmount }) {
       priceChanged: previousPrice !== newCurrentPrice
     };
   });
+
+  // Domain transition: ACTIVE → PENDING triggered by buy-now price hit.
+  // Order must be created immediately when auction closes, not lazily in GET /complete-order.
+  // createOrderFromAuction is idempotent — safe to call even if a duplicate trigger occurs.
+  if (result.productSold) {
+    await createOrderFromAuction({
+      productId,
+      buyerId: result.newHighestBidderId,
+      sellerId: result.sellerId,
+      finalPrice: result.newCurrentPrice
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -159,6 +174,10 @@ export async function placeBid({ productId, userId, bidAmount }) {
  * @param {{ productId: number|string, userId: number }}
  */
 export async function executeBuyNow({ productId, userId }) {
+  // Variables captured from the transaction to support post-transaction order creation.
+  let _sellerId;
+  let _finalPrice;
+
   await db.transaction(async (trx) => {
     const product = await trx('products')
       .leftJoin('users as seller', 'products.seller_id', 'seller.id')
@@ -206,6 +225,21 @@ export async function executeBuyNow({ productId, userId }) {
       is_buy_now: true
     });
     // Note: no auto_bidding upsert for Buy Now — direct purchase, not proxy bid.
+
+    // Capture values for post-transaction order creation.
+    _sellerId = product.seller_id;
+    _finalPrice = buyNowPrice;
+  });
+
+  // Domain transition: ACTIVE → PENDING (Buy Now path).
+  // Order is created immediately after the auction closes so that GET /complete-order
+  // always finds an existing order — it never needs to create one.
+  // createOrderFromAuction is idempotent — safe to call even after a scheduler retry.
+  await createOrderFromAuction({
+    productId,
+    buyerId: userId,
+    sellerId: _sellerId,
+    finalPrice: _finalPrice
   });
 }
 
