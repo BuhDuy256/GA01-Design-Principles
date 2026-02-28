@@ -8,12 +8,12 @@ After the route split in Step 7 (Issues #1, #3, #13), the three route files — 
 
 ## Violated Design Principles (Before Refactoring)
 
-| Issue | File | Location | Principle Violated | Description |
-|--|--|--|--|--|
-| #8 | `product.route.js` | `POST /comment` | SRP + DIP | Route handler directly constructed 3 full HTML email bodies and called `sendMail` inline — mixing HTTP concern with email-domain logic |
-| #11 | `order.route.js` | `POST /submit-rating` | SRP + DRY | Route fetched DB records, built review upsert logic, and ran a 7-step "check both parties" workflow — all inside the route |
-| #12 | `order.route.js` | `POST /complete-transaction` | SRP + DRY | Identical "check both parties → mark order complete → stamp product sold" block duplicated verbatim from Issue #11 |
-| #8b | `rating.route.js` | GET handlers | SRP | Routes fetched models directly, computed stats with inline filter expressions, performed name-masking — all mixed with rendering |
+| Issue | File               | Location                     | Principle Violated | Description                                                                                                                            |
+| ----- | ------------------ | ---------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| #8    | `product.route.js` | `POST /comment`              | SRP + DIP          | Route handler directly constructed 3 full HTML email bodies and called `sendMail` inline — mixing HTTP concern with email-domain logic |
+| #11   | `order.route.js`   | `POST /submit-rating`        | SRP + DRY          | Route fetched DB records, built review upsert logic, and ran a 7-step "check both parties" workflow — all inside the route             |
+| #12   | `order.route.js`   | `POST /complete-transaction` | SRP + DRY          | Identical "check both parties → mark order complete → stamp product sold" block duplicated verbatim from Issue #11                     |
+| #8b   | `rating.route.js`  | GET handlers                 | SRP                | Routes fetched models directly, computed stats with inline filter expressions, performed name-masking — all mixed with rendering       |
 
 ---
 
@@ -140,13 +140,13 @@ export async function completeTransaction({ orderId, userId }) {
 
 ## Before vs. After: Route Handler Size
 
-| Route File | Handler | Lines Before | Lines After | Reduction |
-|--|--|--|--|--|
-| `rating.route.js` | GET /seller-rating | ~45 lines | 6 lines | −87% |
-| `rating.route.js` | GET /bidder-rating | ~48 lines | 7 lines | −85% |
-| `order.route.js` | POST /submit-rating | 57 lines | 15 lines | −74% |
-| `order.route.js` | POST /complete-transaction | 58 lines | 15 lines | −74% |
-| `product.route.js` | POST /comment | ~120 lines | 38 lines | −68% |
+| Route File         | Handler                    | Lines Before | Lines After | Reduction |
+| ------------------ | -------------------------- | ------------ | ----------- | --------- |
+| `rating.route.js`  | GET /seller-rating         | ~45 lines    | 6 lines     | −87%      |
+| `rating.route.js`  | GET /bidder-rating         | ~48 lines    | 7 lines     | −85%      |
+| `order.route.js`   | POST /submit-rating        | 57 lines     | 15 lines    | −74%      |
+| `order.route.js`   | POST /complete-transaction | 58 lines     | 15 lines    | −74%      |
+| `product.route.js` | POST /comment              | ~120 lines   | 38 lines    | −68%      |
 
 ---
 
@@ -188,16 +188,16 @@ This step aligns the three domain route files with the architectural rule establ
 
 > **Routes parse HTTP. Services own logic. Models own persistence.**
 
-Prior to this step, the route split (Step 7) created the correct file *structure* but left residual business logic in the handlers. With this step, all handlers conform to the thin-controller pattern: each handler is a 10–15-line function that validates input, calls one service method, and returns a response.
+Prior to this step, the route split (Step 7) created the correct file _structure_ but left residual business logic in the handlers. With this step, all handlers conform to the thin-controller pattern: each handler is a 10–15-line function that validates input, calls one service method, and returns a response.
 
 ---
 
 ## Summary of Principle Improvements
 
-| Principle | Before | After |
-|--|--|--|
-| **SRP** | Routes responsible for HTTP + DB + email HTML + stats calculation | Routes responsible for HTTP only |
-| **DRY** | "Finalize order" block duplicated in 2 routes; stats filters duplicated in 2 route handlers | Each extracted once into `_finalizeIfBothCompleted()` / `_computeStats()` |
-| **DIP** | `product.route.js` imported `sendMail` directly (low-level); `order.route.js` imported `reviewModel`/`db` directly | Routes depend on service abstractions only |
-| **OCP** | Adding a 4th email case or a 3rd order-finalization path required editing route files | Adding new notification types only requires extending `notification.service.js` |
-| **KISS** | Handlers were long and hard to unit-test | Handlers are visually simple; each service function is independently testable |
+| Principle | Before                                                                                                             | After                                                                           |
+| --------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| **SRP**   | Routes responsible for HTTP + DB + email HTML + stats calculation                                                  | Routes responsible for HTTP only                                                |
+| **DRY**   | "Finalize order" block duplicated in 2 routes; stats filters duplicated in 2 route handlers                        | Each extracted once into `_finalizeIfBothCompleted()` / `_computeStats()`       |
+| **DIP**   | `product.route.js` imported `sendMail` directly (low-level); `order.route.js` imported `reviewModel`/`db` directly | Routes depend on service abstractions only                                      |
+| **OCP**   | Adding a 4th email case or a 3rd order-finalization path required editing route files                              | Adding new notification types only requires extending `notification.service.js` |
+| **KISS**  | Handlers were long and hard to unit-test                                                                           | Handlers are visually simple; each service function is independently testable   |
