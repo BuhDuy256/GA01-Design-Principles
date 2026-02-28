@@ -1,24 +1,27 @@
-import express from 'express';
-import * as productModel from '../models/product.model.js'; // Import model để lấy dữ liệu
+import express from "express";
+import * as homeService from "../services/home.service.js";
+import { setErrorMessage } from "../utils/session.js";
 
 const router = express.Router();
 
-router.get('/', async (req, res) => {
+/**
+ * Home Routes
+ * Follows Single Responsibility Principle: route handlers only manage HTTP concerns.
+ * Business logic is delegated to the service layer.
+ */
+
+/**
+ * GET /
+ * Display home page with featured products
+ */
+router.get("/", async (req, res) => {
   try {
-    // Gọi song song 3 hàm để tiết kiệm thời gian (Promise.all)
-    const [topEnding, topBids, topPrice] = await Promise.all([
-      productModel.findTopEnding(),
-      productModel.findTopBids(),
-      productModel.findTopPrice()
-    ]);
-    res.render('home', { 
-      topEndingProducts: topEnding, 
-      topBidsProducts: topBids, 
-      topPriceProducts: topPrice 
-    });
+    const featuredProducts = await homeService.getFeaturedProducts();
+    res.render("home", featuredProducts);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Internal Server Error');
+    console.error("Error loading home page:", err);
+    setErrorMessage(req, "Unable to load featured products");
+    res.status(500).send("Internal Server Error");
   }
 });
 

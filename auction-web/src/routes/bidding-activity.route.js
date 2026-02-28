@@ -1,67 +1,80 @@
-import express from 'express';
-import { isAuthenticated } from '../middlewares/auth.mdw.js';
-import * as watchlistModel from '../models/watchlist.model.js';
-import * as autoBiddingModel from '../models/autoBidding.model.js';
-import * as reviewModel from '../models/review.model.js';
+import express from "express";
+import { isAuthenticated } from "../middlewares/auth.mdw.js";
+import * as biddingActivityService from "../services/bidding-activity.service.js";
+import { setErrorMessage } from "../utils/session.js";
 
 const router = express.Router();
 
-router.get('/watchlist', isAuthenticated ,async (req, res) => {
-  const limit = 3;
-  const page = parseInt(req.query.page) || 1;
-  const offset = (page - 1) * limit;
-  const currentUserId = req.session.authUser.id;
-  const watchlistProducts = await watchlistModel.searchPageByUserId(currentUserId, limit, offset);
-  const total = await watchlistModel.countByUserId(currentUserId);
-  const totalCount = Number(total.count);
-  const nPages = Math.ceil(totalCount / limit);
-  let from = (page - 1) * limit + 1;
-  let to = page * limit;
-  if (to > totalCount) to = totalCount;
-  if (totalCount === 0) { from = 0; to = 0; }
-  res.render('vwAccount/watchlist', {
-    products: watchlistProducts,
-    totalCount,
-    from,
-    to,
-    currentPage: page,
-    totalPages: nPages,
-  });
-});
+/**
+ * Bidding Activity Routes
+ * Follows Single Responsibility Principle: route handlers only manage HTTP concerns.
+ * Business logic is delegated to the service layer.
+ */
 
-// Bidding Products - Sản phẩm đang tham gia đấu giá
-router.get('/bidding', isAuthenticated, async (req, res) => {
-  const currentUserId = req.session.authUser.id;
-  const biddingProducts = await autoBiddingModel.getBiddingProductsByBidderId(currentUserId);
-  
-  res.render('vwAccount/bidding-products', {
-    activeSection: 'bidding',
-    products: biddingProducts
-  });
-});
+/**
+ * GET /bidding-activity/watchlist
+ * Display user's watchlist with pagination
+ */
+router.get("/watchlist", isAuthenticated, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const currentUserId = req.session.authUser.id;
 
-// Won Auctions - Sản phẩm đã thắng (pending, sold, cancelled)
-router.get('/auctions', isAuthenticated, async (req, res) => {
-  const currentUserId = req.session.authUser.id;
-  const wonAuctions = await autoBiddingModel.getWonAuctionsByBidderId(currentUserId);
-  
-  // Check if user has rated seller for each product
-  for (let product of wonAuctions) {
-    const review = await reviewModel.findByReviewerAndProduct(currentUserId, product.id);
-    // Only show rating if it's not 0 (actual rating, not skip)
-    if (review && review.rating !== 0) {
-      product.has_rated_seller = true;
-      product.seller_rating = review.rating === 1 ? 'positive' : 'negative';
-      product.seller_rating_comment = review.comment;
-    } else {
-      product.has_rated_seller = false;
-    }
+    const watchlistData =
+      await biddingActivityService.getWatchlistWithPagination(
+        currentUserId,
+        page,
+        3, // items per page
+      );
+
+    res.render("vwAccount/watchlist", watchlistData);
+  } catch (error) {
+    console.error("Error loading watchlist:", error);
+    setErrorMessage(req, "Unable to load watchlist");
+    res.redirect("/");
   }
-  
-  res.render('vwAccount/won-auctions', {
-    activeSection: 'auctions',
-    products: wonAuctions
-  });
+});
+
+/**
+ * GET /bidding-activity/bidding
+ * Display products user is currently bidding on
+ */
+router.get("/bidding", isAuthenticated, async (req, res) => {
+  try {
+    const currentUserId = req.session.authUser.id;
+    const biddingProducts =
+      await biddingActivityService.getBiddingProducts(currentUserId);
+
+    res.render("vwAccount/bidding-products", {
+      activeSection: "bidding",
+      products: biddingProducts,
+    });
+  } catch (error) {
+    console.error("Error loading bidding products:", error);
+    setErrorMessage(req, "Unable to load bidding products");
+    res.redirect("/");
+  }
+});
+
+/**
+ * GET /bidding-activity/auctions
+ * Display auctions won by user with rating information
+ */
+router.get("/auctions", isAuthenticated, async (req, res) => {
+  try {
+    const currentUserId = req.session.authUser.id;
+    const wonAuctions =
+      await biddingActivityService.getWonAuctionsWithRatings(currentUserId);
+
+    res.render("vwAccount/won-auctions", {
+      activeSection: "auctions",
+      products: wonAuctions,
+    });
+  } catch (error) {
+    console.error("Error loading won auctions:", error);
+    setErrorMessage(req, "Unable to load won auctions");
+    res.redirect("/");
+  }
 });
 
 export default router;

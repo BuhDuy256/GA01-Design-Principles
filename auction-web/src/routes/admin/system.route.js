@@ -1,64 +1,73 @@
-import express from 'express';
-import * as systemSettingModel from '../../models/systemSetting.model.js';
+import express from "express";
+import * as systemService from "../../services/admin.system.service.js";
+import { setSuccessMessage, setErrorMessage } from "../../utils/session.js";
+
 const router = express.Router();
 
-const DEFAULT_SETTINGS = {
-    new_product_limit_minutes: 60,
-    auto_extend_trigger_minutes: 5,
-    auto_extend_duration_minutes: 10
-};
+/**
+ * Admin System Routes
+ * Follows Single Responsibility Principle: route handlers only manage HTTP concerns.
+ * Business logic is delegated to the service layer.
+ */
 
-router.get('/settings', async (req, res) => {
-    try {
-        const settingsArray = await systemSettingModel.getAllSettings();
-        const settings = { ...DEFAULT_SETTINGS };
-        
-        // Convert array to object
-        if (settingsArray && settingsArray.length > 0) {
-            settingsArray.forEach(setting => {
-                settings[setting.key] = parseInt(setting.value);
-            });
-        }
-        
-        res.render('vwAdmin/system/setting', {
-            settings,
-            success_message: req.query.success
-        });
-    } catch (error) {
-        console.error('Error loading settings:', error);
-        res.render('vwAdmin/system/setting', {
-            settings: { ...DEFAULT_SETTINGS },
-            error_message: 'Failed to load system settings'
-        });
-    }
+/**
+ * GET /admin/system/settings
+ * Display system settings configuration page
+ */
+router.get("/settings", async (req, res) => {
+  try {
+    const settings = await systemService.getAllSettings();
+
+    res.render("vwAdmin/system/setting", {
+      settings,
+      success_message: req.query.success,
+    });
+  } catch (error) {
+    console.error("Error loading settings:", error);
+    const settings = systemService.DEFAULT_SETTINGS;
+
+    res.render("vwAdmin/system/setting", {
+      settings,
+      error_message: "Failed to load system settings",
+    });
+  }
 });
 
-router.post('/settings', async (req, res) => {
-    try {
-        // Update settings dynamically based on req.body keys
-        for (const key of Object.keys(req.body)) {
-            if (Object.keys(DEFAULT_SETTINGS).includes(key) || key) {
-                await systemSettingModel.updateSetting(key, req.body[key]);
-            }
-        }
-        
-        res.redirect('/admin/system/settings?success=Settings updated successfully');
-    } catch (error) {
-        console.error('Error updating settings:', error);
-        const settingsArray = await systemSettingModel.getAllSettings();
-        const settings = { ...DEFAULT_SETTINGS };
-        
-        if (settingsArray && settingsArray.length > 0) {
-            settingsArray.forEach(setting => {
-                settings[setting.key] = parseInt(setting.value);
-            });
-        }
-        
-        res.render('vwAdmin/system/setting', {
-            settings,
-            error_message: 'Failed to update settings. Please try again.'
-        });
+/**
+ * POST /admin/system/settings
+ * Update system settings with validation
+ */
+router.post("/settings", async (req, res) => {
+  try {
+    const result = await systemService.updateSettings(req.body);
+
+    if (result.success) {
+      setSuccessMessage(
+        req,
+        `Settings updated successfully! (${result.updatedCount} settings updated)`,
+      );
+      res.redirect("/admin/system/settings");
+    } else {
+      // Some validations failed
+      setErrorMessage(req, result.errors.join(", "));
+
+      // Re-render form with submitted values
+      const settings = await systemService.getAllSettings();
+      res.render("vwAdmin/system/setting", {
+        settings,
+        error_message: result.errors.join(", "),
+      });
     }
+  } catch (error) {
+    console.error("Error updating settings:", error);
+    setErrorMessage(req, "Failed to update settings. Please try again.");
+
+    const settings = await systemService.getAllSettings();
+    res.render("vwAdmin/system/setting", {
+      settings,
+      error_message: "Failed to update settings. Please try again.",
+    });
+  }
 });
 
 export default router;

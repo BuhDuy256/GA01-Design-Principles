@@ -1,120 +1,174 @@
-import express from 'express';
-import * as productModel from '../../models/product.model.js';
-import * as userModel from '../../models/user.model.js';
-import * as adminProductService from '../../services/admin.product.service.js';
-import multer from 'multer';
-import path from 'path';
+import express from "express";
+import * as adminProductService from "../../services/admin.product.service.js";
+import { setSuccessMessage, setErrorMessage } from "../../utils/session.js";
+import { loadSellers } from "../../middlewares/seller.mdw.js";
+import {
+  uploadSingleThumbnail,
+  uploadMultipleSubImages,
+} from "../../middlewares/upload.mdw.js";
 
 const router = express.Router();
 
-router.get('/list', async (req, res) => {
-    const products = await productModel.findAll();
-    const filteredProducts = products.map(p => ({
-        id: p.id,
-        name: p.name,
-        seller_name: p.seller_name,
-        current_price: p.current_price,
-        highest_bidder_name: p.highest_bidder_name
-    }));
-    res.render('vwAdmin/product/list', {
-        products : filteredProducts,
-        empty: products.length === 0
+/**
+ * Admin Product Routes
+ * Follows Single Responsibility Principle: route handlers only manage HTTP concerns.
+ * Business logic is delegated to the service layer.
+ */
+
+/**
+ * GET /admin/products/list
+ * Display all products
+ */
+router.get("/list", async (req, res) => {
+  try {
+    const products = await adminProductService.getAllProducts();
+    res.render("vwAdmin/product/list", {
+      products,
+      empty: products.length === 0,
     });
+  } catch (error) {
+    console.error("Error fetching products:", error);
+    setErrorMessage(req, "Failed to load products");
+    res.redirect("/admin");
+  }
 });
 
-// Middleware to load sellers for forms
-router.use(['/add', '/edit/:id'], async (req, res, next) => {
-    try {
-        res.locals.sellers = await userModel.findUsersByRole('seller');
-        next();
-    } catch (error) {
-        console.error('Error loading sellers:', error);
-        res.locals.sellers = [];
-        req.session.error_message = 'Failed to load sellers list';
-        next();
-    }
+/**
+ * Middleware to load sellers for add/edit forms
+ * Applied to routes that need seller data
+ */
+router.use(["/add", "/edit/:id"], loadSellers);
+
+/**
+ * GET /admin/products/add
+ * Display add product form
+ */
+router.get("/add", async (req, res) => {
+  res.render("vwAdmin/product/add");
 });
 
-router.get('/add', async (req, res) => {
-    res.render('vwAdmin/product/add');
+/**
+ * POST /admin/products/add
+ * Create a new product with images
+ */
+router.post("/add", async (req, res) => {
+  try {
+    const productData = adminProductService.transformProductFormData(req.body);
+    const imgs = JSON.parse(req.body.imgs_list);
+
+    await adminProductService.createProductWithImages(
+      productData,
+      req.body.thumbnail,
+      imgs,
+    );
+
+    setSuccessMessage(req, "Product added successfully!");
+    res.redirect("/admin/products/list");
+  } catch (error) {
+    console.error("Error creating product:", error);
+    setErrorMessage(req, error.message || "Failed to create product");
+    res.redirect("/admin/products/add");
+  }
 });
 
-router.post('/add', async function (req, res) {
-    const product = req.body;
-    const productData = {
-        seller_id: product.seller_id,
-        category_id: product.category_id,
-        name: product.name,
-        starting_price: product.start_price.replace(/,/g, ''),
-        step_price: product.step_price.replace(/,/g, ''),
-        buy_now_price: product.buy_now_price !== '' ? product.buy_now_price.replace(/,/g, '') : null,
-        created_at: product.created_at,
-        end_at: product.end_date,
-        auto_extend: product.auto_extend === '1' ? true : false,
-        thumbnail: null,  // to be updated after upload
-        description: product.description,
-        highest_bidder_id: null,
-        current_price: product.start_price.replace(/,/g, ''),
-        is_sold: null,
-        closed_at: null,
-        allow_unrated_bidder: product.allow_new_bidders === '1' ? true : false
-    }
-    const imgs = JSON.parse(product.imgs_list);
-
-    await adminProductService.createProductWithImages(productData, product.thumbnail, imgs);
-    res.redirect('/admin/products/list');
-});
-router.get('/detail/:id', async (req, res) => {
+/**
+ * GET /admin/products/detail/:id
+ * Display product details
+ */
+router.get("/detail/:id", async (req, res) => {
+  try {
     const id = req.params.id;
-    const product = await productModel.findByProductIdForAdmin(id);
-    // console.log(product);
-    res.render('vwAdmin/product/detail', { product } );
+    const product = await adminProductService.getProductById(id);
+
+    if (!product) {
+      setErrorMessage(req, "Product not found");
+      return res.redirect("/admin/products/list");
+    }
+
+    res.render("vwAdmin/product/detail", { product });
+  } catch (error) {
+    console.error("Error fetching product details:", error);
+    setErrorMessage(req, "Failed to load product details");
+    res.redirect("/admin/products/list");
+  }
 });
 
-router.get('/edit/:id', async (req, res) => {
+/**
+ * GET /admin/products/edit/:id
+ * Display edit product form
+ */
+router.get("/edit/:id", async (req, res) => {
+  try {
     const id = req.params.id;
-    const product = await productModel.findByProductIdForAdmin(id);
-    res.render('vwAdmin/product/edit', { product } );
+    const product = await adminProductService.getProductById(id);
+
+    if (!product) {
+      setErrorMessage(req, "Product not found");
+      return res.redirect("/admin/products/list");
+    }
+
+    res.render("vwAdmin/product/edit", { product });
+  } catch (error) {
+    console.error("Error loading edit product form:", error);
+    setErrorMessage(req, error.message || "Failed to load form");
+    res.redirect("/admin/products/list");
+  }
 });
 
-router.post('/edit', async (req, res) => {
-    const newProduct = req.body;
-    await productModel.updateProduct(newProduct.id, newProduct);
-    req.session.success_message = 'Product updated successfully!';
-    res.redirect('/admin/products/list');
+/**
+ * POST /admin/products/edit
+ * Update an existing product
+ */
+router.post("/edit", async (req, res) => {
+  try {
+    const { id, ...productData } = req.body;
+    await adminProductService.updateProduct(id, productData);
+    setSuccessMessage(req, "Product updated successfully!");
+    res.redirect("/admin/products/list");
+  } catch (error) {
+    console.error("Error updating product:", error);
+    setErrorMessage(req, error.message || "Failed to update product");
+    res.redirect(`/admin/products/edit/${req.body.id}`);
+  }
 });
 
-router.post('/delete', async (req, res) => {
+/**
+ * POST /admin/products/delete
+ * Delete a product
+ */
+router.post("/delete", async (req, res) => {
+  try {
     const { id } = req.body;
-    await productModel.deleteProduct(id);
-    req.session.success_message = 'Product deleted successfully!';
-    res.redirect('/admin/products/list');
+    await adminProductService.deleteProduct(id);
+    setSuccessMessage(req, "Product deleted successfully!");
+    res.redirect("/admin/products/list");
+  } catch (error) {
+    console.error("Error deleting product:", error);
+    setErrorMessage(req, error.message || "Failed to delete product");
+    res.redirect("/admin/products/list");
+  }
 });
 
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, 'public/uploads/');
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + '-' + file.originalname);
-    }
+/**
+ * POST /admin/products/upload-thumbnail
+ * Upload product thumbnail
+ */
+router.post("/upload-thumbnail", uploadSingleThumbnail, async (req, res) => {
+  res.json({
+    success: true,
+    file: req.file,
+  });
 });
 
-const upload = multer({ storage: storage });
-
-router.post('/upload-thumbnail', upload.single('thumbnail'), async function (req, res) {
-    res.json({
-        success: true,
-        file: req.file
-    });
-});
-
-router.post('/upload-subimages', upload.array('images', 10), async function (req, res) {
-    res.json({
-        success: true,
-        files: req.files
-    });
+/**
+ * POST /admin/products/upload-subimages
+ * Upload product sub-images (up to 10)
+ */
+router.post("/upload-subimages", uploadMultipleSubImages, async (req, res) => {
+  res.json({
+    success: true,
+    files: req.files,
+  });
 });
 
 export default router;
