@@ -23,6 +23,7 @@ import biddingActivityRouter from './routes/bidding-activity.route.js';
 import reputationRouter from './routes/reputation.route.js';
 import adminCategoryRouter from './routes/admin/category.route.js';
 import adminUserRouter from './routes/admin/user.route.js';
+import adminUpgradeRouter from './routes/admin/upgrade.route.js';
 import adminAccountRouter from './routes/admin/account.route.js';
 import adminProductRouter from './routes/admin/product.route.js';
 import adminSystemRouter from './routes/admin/system.route.js';
@@ -375,6 +376,7 @@ app.use('/admin', function (req, res, next) {
 
 // Các Route Admin
 app.use('/admin/account', adminAccountRouter);
+app.use('/admin/users/upgrade', adminUpgradeRouter);
 app.use('/admin/users', adminUserRouter);
 app.use('/admin/categories', adminCategoryRouter);
 app.use('/admin/products', adminProductRouter);

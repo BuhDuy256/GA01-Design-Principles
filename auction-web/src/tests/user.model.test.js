@@ -77,6 +77,22 @@ describe("Unit Tests: user.model.js", () => {
 
       expect(result).toBeUndefined();
     });
+
+    test("UT-USR-10: markUpgradePending(id) should flag user as pending", async () => {
+      mockKnex.update.mockResolvedValueOnce(1);
+      await userModel.markUpgradePending(1);
+      expect(dbFn).toHaveBeenCalledWith("users");
+      expect(mockKnex.where).toHaveBeenCalledWith("id", 1);
+      expect(mockKnex.update).toHaveBeenCalledWith({ is_upgrade_pending: true });
+    });
+
+    test("UT-USR-11: updateUserRoleToSeller(bidderId) should promote user to seller", async () => {
+      mockKnex.update.mockResolvedValueOnce(1);
+      await userModel.updateUserRoleToSeller(1);
+      expect(dbFn).toHaveBeenCalledWith("users");
+      expect(mockKnex.where).toHaveBeenCalledWith("id", 1);
+      expect(mockKnex.update).toHaveBeenCalledWith({ role: "seller", is_upgrade_pending: false });
+    });
   });
 
 
