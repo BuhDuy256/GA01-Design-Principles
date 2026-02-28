@@ -938,4 +938,152 @@ if (status === 'PENDING') {
   \end{itemize}
 \end{frame}
 
+
+% =========================================================
+% SECTION: DRY + SRP — Email & Notification Abstraction
+% Issue #7
+% =========================================================
+\section{Refactoring: Issue \#7 — Notification \& Email DRY}
+
+% ----------------------------------------------------------
+% ISSUE #7 — Slide 1: Problem
+% ----------------------------------------------------------
+\begin{frame}{Issue \#7 — DRY + SRP: HTML Email Boilerplate Lặp Lại 6 Lần}
+
+  \textbf{Vấn đề:} Cùng một cấu trúc HTML wrapper email xuất hiện \textbf{6 lần} trong 2 module.
+
+  \bigskip
+  \begin{block}{Hai module, 6 email functions, 1 template lặp lại}
+    \begin{columns}[t]
+      \column{0.48\textwidth}
+      \textbf{\texttt{auction.service.js}}
+      \begin{itemize}
+        \item \texttt{\_sendSellerEmail()}
+        \item \texttt{\_sendCurrentBidderEmail()}
+        \item \texttt{\_sendPreviousBidderEmail()}
+      \end{itemize}
+      \medskip
+      3 private functions — mỗi function chứa\\
+      \textasciitilde{}50 dòng HTML inline
+
+      \column{0.48\textwidth}
+      \textbf{\texttt{auctionEndNotifier.js}}
+      \begin{itemize}
+        \item Winner notification
+        \item Seller (with winner)
+        \item Seller (no bidders)
+      \end{itemize}
+      \medskip
+      3 inline \texttt{sendMail()} blocks — mỗi block chứa \textasciitilde{}35 dòng HTML inline
+    \end{columns}
+  \end{block}
+
+  \bigskip
+  \begin{alertblock}{SRP Violation: Domain modules owning presentation logic}
+    \texttt{auction.service.js} chịu trách nhiệm: (1) đặt bid \& quản lý transaction,
+    \textbf{VÀ} (2) render HTML email templates.\\
+    \texttt{auctionEndNotifier.js} chịu trách nhiệm: (1) schedule/iterate ended auctions,
+    \textbf{VÀ} (2) construct 3 email layouts khác nhau.
+  \end{alertblock}
+
+  \medskip
+  \textbf{Hậu quả:}
+  \begin{itemize}
+    \item Thay đổi brand color/font/footer → sửa 6 nơi trong 2 file khác nhau
+    \item 2 module import \texttt{sendMail} trực tiếp từ \texttt{mailer.js} (DIP violation)
+    \item Không thể unit test email rendering tách biệt với auction/scheduling logic
+  \end{itemize}
+\end{frame}
+
+% ----------------------------------------------------------
+% ISSUE #7 — Slide 2: Solution
+% ----------------------------------------------------------
+\begin{frame}[fragile]{Issue \#7 — Refactoring: \texttt{notification.service.js}}
+
+  \textbf{Chiến lược:} Trích xuất \textbf{tất cả} email template logic vào một module duy nhất.
+  Domain modules chỉ gọi named function — không biết HTML tồn tại.
+
+  \begin{columns}[t]
+    \column{0.44\textwidth}
+    \textbf{\alert{Trước}} — inline HTML mọi nơi:
+    \footnotesize
+    \begin{verbatim}
+// auction.service.js
+import { sendMail } from
+  '../../utils/mailer.js';
+
+function _sendSellerEmail(
+    { seller, result, productUrl }) {
+  return sendMail({
+    to: seller.email,
+    html: `<div style=
+      "font-family:Arial;
+       max-width:600px;...">
+      <div style=
+        "background:linear-gradient(
+           135deg,#667eea,#764ba2);
+         padding:30px;...">
+        <h1 style="color:white;">
+          Bid Notification
+        </h1>
+      </div>
+      <div style=
+        "background:#f8f9fa;...">
+        ... body content ...
+      </div>` });
+}
+// _sendCurrentBidderEmail: same wrapper
+// _sendPreviousBidderEmail: same wrapper
+    \end{verbatim}
+
+    \column{0.52\textwidth}
+    \textbf{\textcolor{mygreen}{Sau}} — centralized template:
+    \footnotesize
+    \begin{verbatim}
+// notification.service.js (NEW)
+function buildEmailLayout(
+    { headerGradient, title, bodyHtml }) {
+  return `<div style=
+    "font-family:Arial;
+     max-width:600px;margin:0 auto">
+    <div style=
+      "background:${headerGradient};
+       padding:30px;...">
+      <h1 style="color:white">
+        ${title}
+      </h1>
+    </div>
+    <div style=
+      "background-color:#f8f9fa;
+       padding:30px">
+      ${bodyHtml}
+    </div>
+    <p style="color:#888;...">
+      automated message...
+    </p>
+  </div>`;
+}
+// Used by ALL 6 email builders
+
+// auction.service.js (AFTER)
+import * as notificationService
+  from '../notification.service.js';
+// No HTML, no sendMail import
+
+// auctionEndNotifier.js (AFTER)
+await sendAuctionEndedNotifications(
+  { auction, productUrl, status });
+    \end{verbatim}
+  \end{columns}
+
+  \begin{block}{Key Takeaways}
+    \begin{itemize}
+      \item \textbf{DRY}: 1 layout function → 6 email builders. Thay đổi brand: sửa 1 chỗ
+      \item \textbf{SRP}: \texttt{auction.service} không biết HTML tồn tại; notifier không biết email format
+      \item \textbf{DIP}: Chỉ \texttt{notification.service.js} import \texttt{mailer.js} — đổi mail provider: sửa 1 file
+      \item \texttt{auction.service.js}: \textbf{427 $\to$ \textasciitilde{}285 dòng} ($-$33\%). \texttt{auctionEndNotifier.js}: \textbf{170 $\to$ \textasciitilde{}70 dòng} ($-$59\%)
+    \end{itemize}
+  \end{block}
+\end{frame}
+
 \end{document}
