@@ -302,8 +302,202 @@ if (status === 'PENDING') {
   \end{itemize}
 \end{frame}
 
+% =========================================================
+% SECTION: Refactoring review.model.js
+% Issues #11, #12
+% =========================================================
+\section{Phân tích \& Refactoring: \texttt{review.model.js} API}
+
 % ----------------------------------------------------------
-% Summary Slide
+% ISSUE #11 — Slide 1: Problem
+% ----------------------------------------------------------
+\begin{frame}{Issue \#11 — Vi phạm DRY + ISP: Dual INSERT API}
+  \textbf{Vấn đề:} \texttt{review.model.js} export \textbf{hai hàm} thực hiện cùng một INSERT vào bảng \texttt{reviews}, với \textbf{field naming convention khác nhau}.
+
+  \bigskip
+  \textbf{Nguyên tắc vi phạm:} \alert{DRY} + \alert{ISP}
+
+  \bigskip
+  \begin{block}{Hai hàm, hai convention — cùng một DB operation}
+    \begin{itemize}
+      \item \texttt{createReview(reviewData)} → caller dùng \texttt{reviewee\_id} \quad[\textit{seller.route.js}]
+      \item \texttt{create(data)} → caller dùng \texttt{reviewed\_user\_id} \quad[\textit{product/account.route.js}]
+      \item Cả hai đều INSERT vào cùng column \texttt{reviewee\_id} trong DB
+    \end{itemize}
+  \end{block}
+
+  \bigskip
+  \textbf{Rủi ro kỹ thuật:}
+  \begin{itemize}
+    \item Dùng nhầm hàm → truyền sai field name → \texttt{reviewee\_id} lưu \texttt{NULL} silently
+    \item Đổi DB schema (rename column) → phải sửa cả 2 hàm + tất cả caller
+    \item Developer mới không có cách biết hàm nào nên dùng khi nào
+  \end{itemize}
+\end{frame}
+
+% ----------------------------------------------------------
+% ISSUE #11 — Slide 2: Solution
+% ----------------------------------------------------------
+\begin{frame}[fragile]{Issue \#11 — Refactoring: Một API duy nhất, camelCase nhất quán}
+  \textbf{Chiến lược:} Merge thành một hàm canonical với destructuring params (camelCase).
+
+  \begin{columns}[t]
+    \column{0.46\textwidth}
+    \textbf{\alert{Trước}} — 2 hàm, 2 convention:
+    \footnotesize
+    \begin{verbatim}
+// seller.route.js
+await reviewModel.createReview({
+  reviewer_id: sellerId,
+  reviewee_id: bidder_id, // ← field A
+  product_id: productId, ...
+});
+
+// product.route.js
+await reviewModel.create({
+  reviewer_id: reviewerId,
+  reviewed_user_id: revieweeId, // ← field B
+  product_id: ..., ...
+});
+    \end{verbatim}
+
+    \column{0.50\textwidth}
+    \textbf{\textcolor{mygreen}{Sau}} — 1 hàm, camelCase:
+    \footnotesize
+    \begin{verbatim}
+// review.model.js
+export function createReview({
+  reviewerId, revieweeId,
+  productId, rating,
+  comment = null }) {
+  return db('reviews').insert({
+    reviewer_id: reviewerId,
+    reviewee_id: revieweeId, // ← 1 nơi duy nhất
+    product_id:  productId,
+    ...
+  });
+}
+// Tất cả caller dùng cùng interface
+    \end{verbatim}
+  \end{columns}
+
+  \bigskip
+  \textbf{Key Takeaway:} Module là \emph{anti-corruption layer} — chỉ \texttt{review.model.js} biết \texttt{reviewee\_id} column name. Caller chỉ biết domain term \texttt{revieweeId}.
+\end{frame}
+
+% ----------------------------------------------------------
+% ISSUE #12 — Slide 1: Problem
+% ----------------------------------------------------------
+\begin{frame}{Issue \#12 — Vi phạm DRY + YAGNI: Dual UPDATE API}
+  \textbf{Vấn đề:} Hai hàm UPDATE khác nhau ở số lượng tham số WHERE — nhưng tham số thêm (\texttt{reviewee\_id}) là \textbf{redundant predicate} về mặt domain.
+
+  \bigskip
+  \textbf{Nguyên tắc vi phạm:} \alert{DRY} + \alert{YAGNI}
+
+  \bigskip
+  \begin{alertblock}{Domain invariant quan trọng}
+    \textbf{(reviewer\_id, product\_id) đã đủ unique} — một người chỉ review một lần cho một sản phẩm.\\
+    Thêm \texttt{reviewee\_id} vào WHERE không thu hẹp result set — nhưng nếu truyền sai, \textbf{UPDATE 0 rows silently}.
+  \end{alertblock}
+
+  \bigskip
+  \textbf{Biểu hiện inconsistency trong \texttt{seller.route.js}:}
+  \begin{itemize}
+    \item \texttt{POST /products/:id/rate} → dùng \texttt{updateByReviewerAndProduct()} (3 params)
+    \item \texttt{PUT /products/:id/rate} → dùng \texttt{updateReview()} (4 params)
+    \item Cùng một file, hai route làm cùng việc → hai hàm khác nhau
+  \end{itemize}
+\end{frame}
+
+% ----------------------------------------------------------
+% ISSUE #12 — Slide 2: Solution
+% ----------------------------------------------------------
+\begin{frame}[fragile]{Issue \#12 — Refactoring: Encode Domain Invariant vào WHERE}
+  \textbf{Chiến lược:} Giữ lại 2-param version, bỏ 4-param version, đổi sang camelCase.
+
+  \begin{columns}[t]
+    \column{0.46\textwidth}
+    \textbf{\alert{Trước}} — 2 hàm, 2 WHERE:
+    \footnotesize
+    \begin{verbatim}
+// 4-param (seller.route PUT /rate)
+await reviewModel.updateReview(
+  sellerId,
+  highest_bidder_id, // thừa
+  productId, data
+);
+
+// 3-param (seller.route POST /rate)
+await reviewModel
+  .updateByReviewerAndProduct(
+    sellerId, productId, data
+);
+// ← Cùng file, 2 hàm khác nhau
+    \end{verbatim}
+
+    \column{0.50\textwidth}
+    \textbf{\textcolor{mygreen}{Sau}} — 1 hàm, WHERE đúng:
+    \footnotesize
+    \begin{verbatim}
+// review.model.js
+export function updateReview(
+  reviewerId, productId, updateData
+) {
+  return db('reviews')
+    .where('reviewer_id', reviewerId)
+    .where('product_id',  productId)
+    // (reviewer, product) = unique key
+    .update(updateData);
+}
+
+// Mọi caller đều dùng:
+await reviewModel.updateReview(
+  userId, productId, data
+);
+    \end{verbatim}
+  \end{columns}
+
+  \bigskip
+  \textbf{Key Takeaway:} WHERE clause trở thành \emph{executable documentation} của invariant domain: ``một reviewer chỉ có một review cho một product''. Code = specification.
+\end{frame}
+
+% ----------------------------------------------------------
+% Summary Slide — Issues #11 & #12
+% ----------------------------------------------------------
+\begin{frame}{Tổng Kết Issues \#11 \& \#12 — Model Layer Anti-Pattern}
+  \begin{block}{Root Cause chung}
+    \textbf{Incremental development} không có consolidation: mỗi lần thêm feature mới, một hàm mới được tạo thay vì mở rộng hàm hiện có → duplicate API tích lũy.
+  \end{block}
+
+  \bigskip
+  \begin{columns}[t]
+    \column{0.48\textwidth}
+    \textbf{Triệu chứng:}
+    \begin{itemize}
+      \item 2 INSERT functions: \texttt{create()} vs \texttt{createReview()}
+      \item 2 UPDATE functions: 3-param vs 4-param
+      \item Caller buộc phải biết \emph{convention nội bộ} của model
+      \item Silent data loss khi truyền sai field name
+    \end{itemize}
+
+    \column{0.48\textwidth}
+    \textbf{Kết quả sau refactor:}
+    \begin{itemize}
+      \item 1 INSERT: \texttt{createReview(\{...camelCase\})}
+      \item 1 UPDATE: \texttt{updateReview(userId, productId, data)}
+      \item Domain invariant encoded trong WHERE clause
+      \item 3 call-site files updated atomically
+    \end{itemize}
+  \end{columns}
+
+  \bigskip
+  \begin{center}
+    \textit{Model là \textbf{anti-corruption layer} — caller không cần biết DB column naming convention. Chỉ có model mới được biết.}
+  \end{center}
+\end{frame}
+
+% ----------------------------------------------------------
+% Summary Slide — All Issues
 % ----------------------------------------------------------
 \begin{frame}{Tổng Kết: Ba Issues, Một Giải Pháp}
   \begin{block}{Root Cause chung}

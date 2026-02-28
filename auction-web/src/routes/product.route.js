@@ -1227,16 +1227,16 @@ router.post('/order/:orderId/submit-rating', isAuthenticated, async (req, res) =
 
     if (existingReview) {
       // Update existing review
-      await reviewModel.updateByReviewerAndProduct(reviewerId, order.product_id, {
+      await reviewModel.updateReview(reviewerId, order.product_id, {
         rating: ratingValue,
         comment: comment || null
       });
     } else {
-      // Create new review (using existing create function)
-      await reviewModel.create({
-        reviewer_id: reviewerId,
-        reviewed_user_id: revieweeId,
-        product_id: order.product_id,
+      // Create new review
+      await reviewModel.createReview({
+        reviewerId,
+        revieweeId,
+        productId: order.product_id,
         rating: ratingValue,
         comment: comment || null
       });
@@ -1285,10 +1285,10 @@ router.post('/order/:orderId/complete-transaction', isAuthenticated, async (req,
     const existingReview = await reviewModel.findByReviewerAndProduct(reviewerId, order.product_id);
 
     if (!existingReview) {
-      await reviewModel.create({
-        reviewer_id: reviewerId,
-        reviewed_user_id: revieweeId,
-        product_id: order.product_id,
+      await reviewModel.createReview({
+        reviewerId,
+        revieweeId,
+        productId: order.product_id,
         rating: 0, // 0 means skipped
         comment: null
       });
