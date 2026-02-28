@@ -1,0 +1,100 @@
+\documentclass[12pt]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T5]{fontenc}
+\usepackage[vietnamese]{babel}
+\usepackage{lmodern} % Đã có font hỗ trợ tốt tiếng Việt
+\usepackage{csquotes} % Thêm gói này để biblatex không báo lỗi
+% \setbeamertemplate{bibliography item}{\insertbiblabel}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{bm}
+\usepackage{pgfplots}
+
+% \usepackage{enumitem} <--- Gây lỗi, đã bỏ
+
+\usepackage[
+  backend=biber,
+  style=authoryear,
+  sorting=none,
+  bibencoding=utf8
+]{biblatex}
+\addbibresource{references.bib}
+
+% Fix: "in" bị dính (inNAACL-HLT -> in NAACL-HLT)
+\renewbibmacro*{in:}{\printtext{\bibstring{in}\space}}
+
+% 2) Fix: bỏ ngoặc kép quanh title để hết dấu ?
+\DeclareFieldFormat[article,inproceedings,book,online,misc]{title}{#1}
+
+
+
+\pgfplotsset{compat=1.10}
+\PassOptionsToPackage{unicode}{hyperref}
+\hypersetup{unicode=true}
+
+\usepackage{xcolor}
+\definecolor{myblue}{RGB}{31,119,180}
+\definecolor{mygreen}{RGB}{44,160,44}
+\definecolor{myorange}{RGB}{255,127,14}
+\definecolor{myred}{RGB}{214,39,40}
+\definecolor{mypurple}{RGB}{148,103,189}
+\definecolor{myblack}{RGB}{0,0,0}
+
+\pgfplotsset{
+  cycle list={{myblue},{mygreen},{myorange},{myred},{mypurple},{myblack}},
+  every axis plot/.append style={line width=1.2pt, mark=none},
+}
+
+\usetheme{Madrid}
+
+% --- CẤU HÌNH ĐÁNH SỐ 1. 2. 3. CHUẨN BEAMER ---
+% Thay vì dùng setlist, ta dùng lệnh này của Beamer:
+\setbeamertemplate{enumerate items}[default] 
+
+% Hiển thị tên phần ở footer mỗi slide
+\setbeamertemplate{footline}{
+  \leavevmode%
+  \hbox{%
+    \begin{beamercolorbox}[wd=.4\paperwidth,ht=2.25ex,dp=1ex,center]{author in head/foot}%
+      \usebeamerfont{author in head/foot}\insertsection
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.3\paperwidth,ht=2.25ex,dp=1ex,center]{title in head/foot}%
+      \usebeamerfont{title in head/foot}\insertshortauthor
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.3\paperwidth,ht=2.25ex,dp=1ex,right]{date in head/foot}%
+      \usebeamerfont{date in head/foot}\insertframenumber{} / \inserttotalframenumber\hspace*{2ex}
+    \end{beamercolorbox}}%
+  \vskip0pt%
+}
+
+% --- THÔNG TIN BÀI THUYẾT TRÌNH ---
+\title[Design Patterns]{\large Design Patterns\\[0.2em]
+\normalsize trong Phát triển Phần mềm}
+
+\subtitle{\scriptsize Phân tích và vận dụng các\\[0.2em]
+\scriptsize Behavioral, Structural và Creational Patterns}
+
+\author[Nhóm 10]{\textbf{Nhóm 10}\\[0.35em]\scriptsize
+23127006 -- Trần Nguyễn Khải Luân\\
+23127179 -- Nguyễn Bảo Duy\\
+23127404 -- Lê Tuấn Lộc}
+
+\institute[HCMUS]{\scriptsize Trường Đại học Khoa học Tự nhiên, ĐHQG-HCM\\[0.25em]
+\scriptsize \textit{Học phần:} Thiết kế phần mềm}
+
+
+\begin{document}
+
+% Title Page
+\begin{frame}
+  \titlepage 
+\end{frame}
+
+% Table of Contents
+\begin{frame}{Nội dung trình bày}
+  \tableofcontents
+\end{frame}
+
+% \input{sections/01_section1.tex}
+
+\end{document}
