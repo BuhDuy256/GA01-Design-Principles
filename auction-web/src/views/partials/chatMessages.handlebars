@@ -1,0 +1,10 @@
+{{#each messages}}
+  <div class="chat-message {{#if this.isSent}}text-end{{/if}}">
+    <div class="chat-bubble {{#if this.isSent}}sent{{else}}received{{/if}}">
+      
+      <div>{{this.message}}</div>
+      
+      <div style="font-size: 0.7rem; margin-top: 3px; opacity: 0.8;">{{this.formattedDate}}</div>
+    </div>
+  </div>
+{{/each}}

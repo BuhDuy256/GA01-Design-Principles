@@ -7,7 +7,7 @@ import methodOverride from 'method-override';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import { v4 as uuidv4 } from 'uuid';
+// import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import passport from './utils/passport.js';
 
@@ -17,6 +17,7 @@ import { startAuctionEndNotifier } from './scripts/auctionEndNotifier.js';
 // Import Routes
 import homeRouter from './routes/home.route.js';
 import productRouter from './routes/product.route.js';
+import orderRouter from './routes/order.route.js';
 import accountRouter from './routes/account.route.js';
 import authRouter from './routes/auth.route.js';
 import biddingActivityRouter from './routes/bidding-activity.route.js';
@@ -415,6 +416,7 @@ app.get('/api/categories', async (req, res) => {
 
 // Các Route Client (Đặt cuối cùng để tránh override)
 app.use('/', homeRouter);
+app.use('/products/order', orderRouter);
 app.use('/products', productRouter);
 app.use('/account', authRouter);
 app.use('/account', accountRouter);
