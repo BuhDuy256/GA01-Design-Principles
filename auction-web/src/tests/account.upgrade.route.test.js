@@ -23,6 +23,13 @@ const mockUpgradeModel = {
 };
 jest.unstable_mockModule("../models/upgradeRequest.model.js", () => mockUpgradeModel);
 
+const mockUpgradeService = {
+  submitUpgradeRequest: jest.fn(),
+};
+jest.unstable_mockModule("../services/upgrade.service.js", () => ({
+  default: mockUpgradeService
+}));
+
 // Mock extra module dependencies from account router
 const mockUserService = {
   updateProfile: jest.fn()
@@ -81,14 +88,12 @@ describe("Integration Tests: /account/request-upgrade", () => {
   });
 
   test("IT-REQ-03: POST /request-upgrade valid request should redirect", async () => {
-    mockUserModel.markUpgradePending.mockResolvedValueOnce(true);
-    mockUpgradeModel.createUpgradeRequest.mockResolvedValueOnce(true);
+    mockUpgradeService.submitUpgradeRequest.mockResolvedValueOnce(true);
 
     const response = await request(app).post("/account/request-upgrade").send();
     expect(response.status).toBe(302);
     expect(response.headers.location).toBe("/account/profile?send-request-upgrade=true");
-    expect(mockUserModel.markUpgradePending).toHaveBeenCalledWith(1);
-    expect(mockUpgradeModel.createUpgradeRequest).toHaveBeenCalledWith(1);
+    expect(mockUpgradeService.submitUpgradeRequest).toHaveBeenCalledWith(1);
   });
 
   test("IT-REQ-04: POST /request-upgrade unauthenticated user", async () => {

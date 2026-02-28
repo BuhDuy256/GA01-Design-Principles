@@ -26,6 +26,14 @@ const mockUpgradeModel = {
 };
 jest.unstable_mockModule("../models/upgradeRequest.model.js", () => mockUpgradeModel);
 
+const mockUpgradeService = {
+  approveUpgradeRequest: jest.fn(),
+  rejectUpgradeRequest: jest.fn(),
+};
+jest.unstable_mockModule("../services/upgrade.service.js", () => ({
+  default: mockUpgradeService
+}));
+
 const mockMailer = {
   sendMail: jest.fn()
 };
@@ -76,7 +84,7 @@ describe("Integration Tests: /admin/users/upgrade/*", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.location).toBe("/admin/users/upgrade-requests");
-    expect(mockUserModel.updateUserRoleToSeller).toHaveBeenCalledWith(2);
+    expect(mockUpgradeService.approveUpgradeRequest).toHaveBeenCalledWith(99, 2);
   });
 
   test("IT-ADM-03: POST /upgrade/reject marks request as rejected", async () => {
@@ -88,6 +96,6 @@ describe("Integration Tests: /admin/users/upgrade/*", () => {
     });
 
     expect(response.headers.location).toBe("/admin/users/upgrade-requests");
-    expect(mockUpgradeModel.rejectUpgradeRequest).toHaveBeenCalledWith(99, "not qualified");
+    expect(mockUpgradeService.rejectUpgradeRequest).toHaveBeenCalledWith(99, "not qualified");
   });
 });

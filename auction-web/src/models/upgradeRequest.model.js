@@ -3,8 +3,8 @@ import db from '../utils/db.js';
 export function findByUserId(bidderId) {
   return db('upgrade_requests').where('bidder_id', bidderId).first();
 }
-export function createUpgradeRequest(bidderId) {
-  return db('upgrade_requests').insert({
+export function createUpgradeRequest(bidderId, trx = db) {
+  return trx('upgrade_requests').insert({
     bidder_id: bidderId,
   });
 }
@@ -14,16 +14,16 @@ export function loadAllUpgradeRequests() {
     .select('upgrade_requests.*', 'users.fullname as fullname', 'users.email as email')
     .orderBy('upgrade_requests.created_at', 'desc'); // Sắp xếp mới nhất lên đầu
 }
-export function approveUpgradeRequest(requestId) {
-    return db('upgrade_requests')
+export function approveUpgradeRequest(requestId, trx = db) {
+    return trx('upgrade_requests')
         .where('id', requestId)
         .update({ 
             status: 'approved', 
             updated_at: new Date() 
         });
 }
-export function rejectUpgradeRequest(requestId, admin_note) {
-    return db('upgrade_requests')
+export function rejectUpgradeRequest(requestId, admin_note, trx = db) {
+    return trx('upgrade_requests')
         .where('id', requestId)
         .update({ 
             status: 'rejected', 

@@ -51,13 +51,13 @@ export function updateUserInfo(user_id, { email, fullname, address }) {
     .where('id', user_id)
     .update({ email, fullname, address });
 }
-export function markUpgradePending(user_id) {
-  return db('users')
+export function markUpgradePending(user_id, trx = db) {
+  return trx('users')
     .where('id', user_id)
     .update({ is_upgrade_pending: true });
 }
-export function updateUserRoleToSeller(user_id) {
-  return db('users')
+export function updateUserRoleToSeller(user_id, trx = db) {
+  return trx('users')
     .where('id', user_id)
     .update({ role: 'seller', is_upgrade_pending: false });
 }

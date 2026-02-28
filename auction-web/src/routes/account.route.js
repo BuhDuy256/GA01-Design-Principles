@@ -2,6 +2,7 @@ import express from 'express';
 import { UserService } from '../services/user.service.js';
 import * as userModel from '../models/user.model.js';
 import * as upgradeRequestModel from '../models/upgradeRequest.model.js';
+import upgradeService from '../services/upgrade.service.js';
 import { isAuthenticated } from '../middlewares/auth.mdw.js';
 
 const router = express.Router();
@@ -72,8 +73,7 @@ router.get('/request-upgrade', isAuthenticated, async (req, res) => {
 router.post('/request-upgrade', isAuthenticated, async (req, res) => {
   try {
     const currentUserId = req.session.authUser.id;
-    await userModel.markUpgradePending(currentUserId);
-    await upgradeRequestModel.createUpgradeRequest(currentUserId);
+    await upgradeService.submitUpgradeRequest(currentUserId);
     return res.redirect('/account/profile?send-request-upgrade=true');
   } catch (err) {
     console.error(err);
