@@ -1,0 +1,89 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`Product Routes - Snapshot Tests DELETE /products/watchlist UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests DELETE /products/watchlist UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests GET /products/bid-history/:productId SUCCESS: should return bidding history JSON: json-response 1`] = `
+{
+  "success": true,
+}
+`;
+
+exports[`Product Routes - Snapshot Tests GET /products/bid-history/:productId SUCCESS: should return bidding history JSON: status-code 1`] = `200`;
+
+exports[`Product Routes - Snapshot Tests GET /products/bid-history/:productId SUCCESS: should return empty array for no history: json-response 1`] = `
+{
+  "success": true,
+}
+`;
+
+exports[`Product Routes - Snapshot Tests GET /products/bid-history/:productId SUCCESS: should return empty array for no history: status-code 1`] = `200`;
+
+exports[`Product Routes - Snapshot Tests GET /products/bidding-history UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests GET /products/bidding-history UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests GET /products/complete-order UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests GET /products/complete-order UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests GET /products/order/:orderId/messages UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests GET /products/order/:orderId/messages UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests POST /products/bid UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests POST /products/bid UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests POST /products/buy-now UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests POST /products/buy-now UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests POST /products/comment UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests POST /products/comment UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/:orderId/complete-transaction UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/:orderId/complete-transaction UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/:orderId/confirm-delivery UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/:orderId/confirm-delivery UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/:orderId/confirm-payment UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/:orderId/confirm-payment UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/:orderId/send-message UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/:orderId/send-message UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/:orderId/submit-payment UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/:orderId/submit-payment UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/:orderId/submit-rating UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/:orderId/submit-rating UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/:orderId/submit-shipping UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/:orderId/submit-shipping UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/upload-images UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests POST /products/order/upload-images UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests POST /products/reject-bidder UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests POST /products/reject-bidder UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests POST /products/unreject-bidder UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests POST /products/unreject-bidder UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Product Routes - Snapshot Tests POST /products/watchlist UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Product Routes - Snapshot Tests POST /products/watchlist UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
