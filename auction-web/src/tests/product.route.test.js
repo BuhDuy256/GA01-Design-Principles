@@ -1159,6 +1159,7 @@ describe('Product Routes', () => {
             where: jest.fn().mockReturnThis(),
             forUpdate: jest.fn().mockReturnThis(),
             first: jest.fn(),
+            select: jest.fn().mockReturnThis(),
             insert: jest.fn().mockReturnThis(),
             onConflict: jest.fn().mockReturnThis(),
             ignore: jest.fn().mockResolvedValue({}),
@@ -1172,7 +1173,7 @@ describe('Product Routes', () => {
           } else if (table === 'auto_bidding') {
             query.first.mockResolvedValue({ bidder_id: 5, max_price: 100 });
           } else if (table === 'users') {
-            query.first.mockResolvedValue({ id: 5, email: 'bidder@test.com' });
+            query.first.mockResolvedValue({ id: 5, email: 'bidder@test.com', fullname: 'Test Bidder' });
           }
 
           return query;

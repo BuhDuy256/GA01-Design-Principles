@@ -131,7 +131,43 @@ export async function searchProducts({ keywords, page = 1, logic = 'and', sort =
 }
 
 /**
+ * Product status determination rules (OCP Compliant - Open for Extension, Closed for Modification)
+ * To add a new status, simply add a new rule to this array without modifying the determineProductStatus function
+ * 
+ * Each rule contains:
+ * - status: The status string to return
+ * - matches: A predicate function that returns true if the rule applies
+ */
+const PRODUCT_STATUS_RULES = [
+  {
+    status: 'SOLD',
+    matches: (product, now, endDate) => product.is_sold === true
+  },
+  {
+    status: 'CANCELLED',
+    matches: (product, now, endDate) => product.is_sold === false
+  },
+  {
+    status: 'PENDING',
+    matches: (product, now, endDate) =>
+      (endDate <= now || product.closed_at) && product.highest_bidder_id
+  },
+  {
+    status: 'EXPIRED',
+    matches: (product, now, endDate) =>
+      endDate <= now && !product.highest_bidder_id
+  },
+  {
+    status: 'ACTIVE',
+    matches: (product, now, endDate) =>
+      endDate > now && !product.closed_at
+  }
+];
+
+/**
  * Determine product status based on current state
+ * This function is closed for modification - new statuses are added to PRODUCT_STATUS_RULES array
+ * 
  * @param {Object} product - Product object
  * @returns {string} Product status (ACTIVE, SOLD, CANCELLED, PENDING, EXPIRED)
  */
@@ -139,18 +175,13 @@ function determineProductStatus(product) {
   const now = new Date();
   const endDate = new Date(product.end_at);
 
-  if (product.is_sold === true) {
-    return 'SOLD';
-  } else if (product.is_sold === false) {
-    return 'CANCELLED';
-  } else if ((endDate <= now || product.closed_at) && product.highest_bidder_id) {
-    return 'PENDING';
-  } else if (endDate <= now && !product.highest_bidder_id) {
-    return 'EXPIRED';
-  } else if (endDate > now && !product.closed_at) {
-    return 'ACTIVE';
-  }
-  return 'ACTIVE';
+  // Find the first matching rule
+  const matchedRule = PRODUCT_STATUS_RULES.find(rule =>
+    rule.matches(product, now, endDate)
+  );
+
+  // Return matched status or default to ACTIVE
+  return matchedRule ? matchedRule.status : 'ACTIVE';
 }
 
 /**
