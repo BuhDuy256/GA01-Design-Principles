@@ -175,7 +175,7 @@ Ownership verification pattern repeated 4+ times with slight variations. Differe
 **Repeated Code Pattern:**
 
 ```javascript
-// In /detail (lines 154-161)
+// In /detail
 const now = new Date();
 const endDate = new Date(product.end_at);
 if (endDate <= now && !product.closed_at && product.is_sold === null) {
@@ -183,21 +183,21 @@ if (endDate <= now && !product.closed_at && product.is_sold === null) {
   product.closed_at = endDate;
 }
 
-// In /bid (lines 395-400)
+// In /bid
 const now = new Date();
 const endDate = new Date(product.end_at);
 if (now > endDate) {
   throw new Error("Auction has ended");
 }
 
-// In /reject-bidder (lines 1027-1033)
+// In /reject-bidder
 const now = new Date();
 const endDate = new Date(product.end_at);
 if (product.is_sold !== null || endDate <= now || product.closed_at) {
   throw new Error("Can only reject bidders for active auctions");
 }
 
-// In /buy-now (lines 1270-1278)
+// In /buy-now
 const now = new Date();
 const endDate = new Date(product.end_at);
 if (product.is_sold !== null) {
@@ -221,7 +221,7 @@ Same business rule (check if auction ended) implemented 5 different ways across 
 **Repeated Code Pattern:**
 
 ```javascript
-// In /detail (lines 237-247)
+// In /detail
 const sellerRatingObject = await reviewModel.calculateRatingPoint(
   product.seller_id,
 );
@@ -237,18 +237,10 @@ if (product.highest_bidder_id) {
   );
 }
 
-// In /seller/:sellerId/ratings (lines 1361-1374)
+// In /seller/:sellerId/ratings, /bidder/:bidderId/ratings
 const ratingData = await reviewModel.calculateRatingPoint(sellerId);
 const rating_point = ratingData ? ratingData.rating_point : 0;
 const reviews = await reviewModel.getReviewsByUserId(sellerId);
-const totalReviews = reviews.length;
-const positiveReviews = reviews.filter((r) => r.rating === 1).length;
-const negativeReviews = reviews.filter((r) => r.rating === -1).length;
-
-// In /bidder/:bidderId/ratings (lines 1403-1416)
-const ratingData = await reviewModel.calculateRatingPoint(bidderId);
-const rating_point = ratingData ? ratingData.rating_point : 0;
-const reviews = await reviewModel.getReviewsByUserId(bidderId);
 const totalReviews = reviews.length;
 const positiveReviews = reviews.filter((r) => r.rating === 1).length;
 const negativeReviews = reviews.filter((r) => r.rating === -1).length;

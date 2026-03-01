@@ -18,6 +18,7 @@ import { parsePostgresArray } from '../utils/dbHelpers.js';
 import { paginate } from '../utils/pagination.js';
 import { ensureProductExists, ensureSellerOwnership, ensureCanViewProduct, ensureProductIsActive, ensureNotSeller } from '../utils/productAuthorization.js';
 import * as orderService from '../services/order.service.js';
+import { getUserRatingSummary } from '../services/ratingService.js';
 const router = express.Router();
 
 const prepareProductList = async (products) => {
@@ -207,15 +208,12 @@ router.get('/detail', async (req, res) => {
   delete req.session.error_message;
 
   // Get seller rating
-  const sellerRatingObject = await reviewModel.calculateRatingPoint(product.seller_id);
-  const sellerReviews = await reviewModel.getReviewsByUserId(product.seller_id);
+  const sellerRatingSummary = await getUserRatingSummary(product.seller_id);
 
   // Get bidder rating (if exists)
-  let bidderRatingObject = { rating_point: null };
-  let bidderReviews = [];
+  let bidderRatingSummary = { rating_point: null, reviews: [] };
   if (product.highest_bidder_id) {
-    bidderRatingObject = await reviewModel.calculateRatingPoint(product.highest_bidder_id);
-    bidderReviews = await reviewModel.getReviewsByUserId(product.highest_bidder_id);
+    bidderRatingSummary = await getUserRatingSummary(product.highest_bidder_id);
   }
 
   // Check if should show payment button (for seller or highest bidder when status is PENDING)
@@ -236,10 +234,10 @@ router.get('/detail', async (req, res) => {
     success_message,
     error_message,
     related_products,
-    seller_rating_point: sellerRatingObject.rating_point,
-    seller_has_reviews: sellerReviews.length > 0,
-    bidder_rating_point: bidderRatingObject.rating_point,
-    bidder_has_reviews: bidderReviews.length > 0,
+    seller_rating_point: sellerRatingSummary.rating_point,
+    seller_has_reviews: sellerRatingSummary.reviews.length > 0,
+    bidder_rating_point: bidderRatingSummary.rating_point,
+    bidder_has_reviews: bidderRatingSummary.reviews.length > 0,
     commentPage,
     totalPages,
     totalComments,
@@ -1305,25 +1303,16 @@ router.get('/seller/:sellerId/ratings', async (req, res) => {
       return res.redirect('/');
     }
 
-    // Get rating point
-    const ratingData = await reviewModel.calculateRatingPoint(sellerId);
-    const rating_point = ratingData ? ratingData.rating_point : 0;
-
-    // Get all reviews
-    const reviews = await reviewModel.getReviewsByUserId(sellerId);
-
-    // Calculate statistics
-    const totalReviews = reviews.length;
-    const positiveReviews = reviews.filter(r => r.rating === 1).length;
-    const negativeReviews = reviews.filter(r => r.rating === -1).length;
+    // Get comprehensive rating summary
+    const ratingSummary = await getUserRatingSummary(sellerId);
 
     res.render('vwProduct/seller-ratings', {
       sellerName: seller.fullname,
-      rating_point,
-      totalReviews,
-      positiveReviews,
-      negativeReviews,
-      reviews
+      rating_point: ratingSummary.rating_point,
+      totalReviews: ratingSummary.totalReviews,
+      positiveReviews: ratingSummary.positiveReviews,
+      negativeReviews: ratingSummary.negativeReviews,
+      reviews: ratingSummary.reviews
     });
 
   } catch (error) {
@@ -1347,17 +1336,8 @@ router.get('/bidder/:bidderId/ratings', async (req, res) => {
       return res.redirect('/');
     }
 
-    // Get rating point
-    const ratingData = await reviewModel.calculateRatingPoint(bidderId);
-    const rating_point = ratingData ? ratingData.rating_point : 0;
-
-    // Get all reviews
-    const reviews = await reviewModel.getReviewsByUserId(bidderId);
-
-    // Calculate statistics
-    const totalReviews = reviews.length;
-    const positiveReviews = reviews.filter(r => r.rating === 1).length;
-    const negativeReviews = reviews.filter(r => r.rating === -1).length;
+    // Get comprehensive rating summary
+    const ratingSummary = await getUserRatingSummary(bidderId);
 
     // Mask bidder name
     const maskedName = bidder.fullname ? bidder.fullname.split('').map((char, index) =>
@@ -1366,11 +1346,11 @@ router.get('/bidder/:bidderId/ratings', async (req, res) => {
 
     res.render('vwProduct/bidder-ratings', {
       bidderName: maskedName,
-      rating_point,
-      totalReviews,
-      positiveReviews,
-      negativeReviews,
-      reviews
+      rating_point: ratingSummary.rating_point,
+      totalReviews: ratingSummary.totalReviews,
+      positiveReviews: ratingSummary.positiveReviews,
+      negativeReviews: ratingSummary.negativeReviews,
+      reviews: ratingSummary.reviews
     });
 
   } catch (error) {
