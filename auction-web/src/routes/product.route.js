@@ -1,6 +1,5 @@
 import express from 'express';
 import * as productModel from '../models/product.model.js';
-import * as reviewModel from '../models/review.model.js';
 import * as userModel from '../models/user.model.js';
 import * as watchListModel from '../models/watchlist.model.js';
 import * as biddingHistoryModel from '../models/biddingHistory.model.js';
@@ -13,7 +12,6 @@ import * as invoiceModel from '../models/invoice.model.js';
 import * as orderChatModel from '../models/orderChat.model.js';
 import { isAuthenticated } from '../middlewares/auth.mdw.js';
 import { sendMail } from '../utils/mailer.js';
-import db from '../utils/db.js';
 import { parsePostgresArray } from '../utils/dbHelpers.js';
 import { paginate } from '../utils/pagination.js';
 import { ensureProductExists, ensureSellerOwnership, ensureCanViewProduct, ensureProductIsActive, ensureNotSeller } from '../utils/productAuthorization.js';
@@ -355,7 +353,6 @@ router.post('/bid', isAuthenticated, async (req, res) => {
 // ROUTE: COMPLETE ORDER PAGE (For PENDING products)
 
 router.get('/complete-order', isAuthenticated, async (req, res) => {
-  d
   try {
     const userId = req.session.authUser.id;
     const productId = req.query.id;
@@ -509,150 +506,21 @@ router.post('/reject-bidder', isAuthenticated, async (req, res) => {
   const sellerId = req.session.authUser.id;
 
   try {
-    let rejectedBidderInfo = null;
-    let productInfo = null;
-    let sellerInfo = null;
-
-    // Use transaction to ensure data consistency
-    await db.transaction(async (trx) => {
-      // 1. Lock and verify product ownership
-      const product = await trx('products')
-        .where('id', productId)
-        .forUpdate()
-        .first();
-
-      // Verify product exists and seller ownership
-      ensureProductExists(product);
-      ensureSellerOwnership(product, sellerId, 'reject bidders');
-      ensureProductIsActive(product, 'reject bidders');
-
-      // 2. Check if bidder has actually bid on this product
-      const autoBid = await trx('auto_bidding')
-        .where('product_id', productId)
-        .where('bidder_id', bidderId)
-        .first();
-
-      if (!autoBid) {
-        throw new Error('This bidder has not placed a bid on this product');
-      }
-
-      // Get bidder info for email notification
-      rejectedBidderInfo = await trx('users')
-        .where('id', bidderId)
-        .first();
-
-      productInfo = product;
-      sellerInfo = await trx('users')
-        .where('id', sellerId)
-        .first();
-
-      // 3. Add to rejected_bidders table
-      await trx('rejected_bidders').insert({
-        product_id: productId,
-        bidder_id: bidderId,
-        seller_id: sellerId
-      }).onConflict(['product_id', 'bidder_id']).ignore();
-
-      // 4. Remove all bidding history of this bidder for this product
-      await trx('bidding_history')
-        .where('product_id', productId)
-        .where('bidder_id', bidderId)
-        .del();
-
-      // 5. Remove from auto_bidding
-      await trx('auto_bidding')
-        .where('product_id', productId)
-        .where('bidder_id', bidderId)
-        .del();
-
-      // 6. Recalculate highest bidder and current price
-      // Always check remaining bidders after rejection
-      const allAutoBids = await trx('auto_bidding')
-        .where('product_id', productId)
-        .orderBy('max_price', 'desc');
-
-      const bidderIdNum = parseInt(bidderId);
-      const highestBidderIdNum = parseInt(product.highest_bidder_id);
-      const wasHighestBidder = (highestBidderIdNum === bidderIdNum);
-
-      if (allAutoBids.length === 0) {
-        // No more bidders - reset to starting state
-        await trx('products')
-          .where('id', productId)
-          .update({
-            highest_bidder_id: null,
-            current_price: product.starting_price,
-            highest_max_price: null
-          });
-        // Don't add bidding history - no one actually bid
-      } else if (allAutoBids.length === 1) {
-        // Only one bidder left - they win at starting price (no competition)
-        const winner = allAutoBids[0];
-        const newPrice = product.starting_price;
-
-        await trx('products')
-          .where('id', productId)
-          .update({
-            highest_bidder_id: winner.bidder_id,
-            current_price: newPrice,
-            highest_max_price: winner.max_price
-          });
-
-        // Add history entry only if price changed
-        if (wasHighestBidder || product.current_price !== newPrice) {
-          await trx('bidding_history').insert({
-            product_id: productId,
-            bidder_id: winner.bidder_id,
-            current_price: newPrice
-          });
-        }
-      } else if (wasHighestBidder) {
-        // Multiple bidders and rejected was highest - recalculate price
-        const firstBidder = allAutoBids[0];
-        const secondBidder = allAutoBids[1];
-
-        // Current price should be minimum to beat second highest
-        let newPrice = secondBidder.max_price + product.step_price;
-
-        // But cannot exceed first bidder's max
-        if (newPrice > firstBidder.max_price) {
-          newPrice = firstBidder.max_price;
-        }
-
-        await trx('products')
-          .where('id', productId)
-          .update({
-            highest_bidder_id: firstBidder.bidder_id,
-            current_price: newPrice,
-            highest_max_price: firstBidder.max_price
-          });
-
-        // Add history entry only if price changed
-        const lastHistory = await trx('bidding_history')
-          .where('product_id', productId)
-          .orderBy('created_at', 'desc')
-          .first();
-
-        if (!lastHistory || lastHistory.current_price !== newPrice) {
-          await trx('bidding_history').insert({
-            product_id: productId,
-            bidder_id: firstBidder.bidder_id,
-            current_price: newPrice
-          });
-        }
-      }
-      // If rejected bidder was NOT the highest bidder and still multiple bidders left, 
-      // don't update anything - just removing them from auto_bidding is enough
+    // Call service layer - all business logic handled there
+    const result = await bidService.rejectBidder({
+      productId,
+      bidderId,
+      sellerId
     });
 
     // Send email notification to rejected bidder via email service
-    if (rejectedBidderInfo && rejectedBidderInfo.email && productInfo) {
+    if (result.rejectedBidderInfo && result.rejectedBidderInfo.email && result.productInfo) {
       const homeUrl = `${req.protocol}://${req.get('host')}/`;
       sendRejectionNotification({
         bidderId,
         productId,
-        productName: productInfo.name,
-        sellerName: sellerInfo ? sellerInfo.fullname : 'N/A',
+        productName: result.productInfo.name,
+        sellerName: result.sellerInfo ? result.sellerInfo.fullname : 'N/A',
         homeUrl
       });
     }
@@ -701,84 +569,10 @@ router.post('/buy-now', isAuthenticated, async (req, res) => {
   const userId = req.session.authUser.id;
 
   try {
-    await db.transaction(async (trx) => {
-      // 1. Get product information
-      const product = await trx('products')
-        .leftJoin('users as seller', 'products.seller_id', 'seller.id')
-        .where('products.id', productId)
-        .select('products.*', 'seller.fullname as seller_name')
-        .first();
-
-      // Verify product exists and user is not the seller
-      ensureProductExists(product);
-      ensureNotSeller(product, userId, 'buy their own product');
-
-      // 3. Check if product is still ACTIVE
-      const now = new Date();
-      const endDate = new Date(product.end_at);
-
-      if (product.is_sold !== null) {
-        throw new Error('Product is no longer available');
-      }
-
-      if (endDate <= now || product.closed_at) {
-        throw new Error('Auction has already ended');
-      }
-
-      // 4. Check if buy_now_price exists
-      if (!product.buy_now_price) {
-        throw new Error('Buy Now option is not available for this product');
-      }
-
-      const buyNowPrice = parseFloat(product.buy_now_price);
-
-      // 5. Check if bidder is rejected
-      const isRejected = await trx('rejected_bidders')
-        .where({ product_id: productId, bidder_id: userId })
-        .first();
-
-      if (isRejected) {
-        throw new Error('You have been rejected from bidding on this product');
-      }
-
-      // 6. Check if bidder is unrated and product doesn't allow unrated bidders
-      if (!product.allow_unrated_bidder) {
-        const bidder = await trx('users').where('id', userId).first();
-        const ratingData = await reviewModel.calculateRatingPoint(userId);
-        const ratingPoint = ratingData ? ratingData.rating_point : 0;
-
-        if (ratingPoint === 0) {
-          throw new Error('This product does not allow bidders without ratings');
-        }
-      }
-
-      // 7. Close the auction immediately at buy now price
-      // Mark as buy_now_purchase to distinguish from regular bidding wins
-      await trx('products')
-        .where('id', productId)
-        .update({
-          current_price: buyNowPrice,
-          highest_bidder_id: userId,
-          highest_max_price: buyNowPrice,
-          end_at: now,
-          closed_at: now,
-          is_buy_now_purchase: true
-        });
-
-      // 8. Create bidding history record
-      // Mark this record as a Buy Now purchase (not a regular bid)
-      await trx('bidding_history').insert({
-        product_id: productId,
-        bidder_id: userId,
-        current_price: buyNowPrice,
-        is_buy_now: true
-      });
-
-      // Note: We do NOT insert into auto_bidding table for Buy Now purchases
-      // Reason: Buy Now is a direct purchase, not an auto bid. If we insert here,
-      // it could create inconsistency where another bidder has higher max_price 
-      // in auto_bidding table but this user is the highest_bidder in products table.
-      // The bidding_history record above is sufficient to track this purchase.
+    // Call service layer - all business logic handled there
+    await bidService.buyNowPurchase({
+      userId,
+      productId
     });
 
     res.json({

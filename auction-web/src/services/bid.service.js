@@ -257,3 +257,272 @@ export async function placeBid({ userId, productId, bidAmount, productUrl }) {
 
   return result;
 }
+
+/**
+ * Reject a bidder from a product
+ * Removes all their bids and recalculates the auction state
+ * 
+ * @param {Object} params - Rejection parameters
+ * @param {number} params.productId - Product ID
+ * @param {number} params.bidderId - Bidder ID to reject
+ * @param {number} params.sellerId - Seller ID performing the rejection
+ * @returns {Promise<Object>} Result with rejected bidder info
+ * @throws {Error} If validation fails
+ */
+export async function rejectBidder({ productId, bidderId, sellerId }) {
+  const result = await db.transaction(async (trx) => {
+    // 1. Lock and verify product ownership
+    const product = await trx('products')
+      .where('id', productId)
+      .forUpdate()
+      .first();
+
+    if (!product) {
+      throw new Error('Product not found');
+    }
+
+    if (product.seller_id !== sellerId) {
+      throw new Error('You do not own this product');
+    }
+
+    // Check product is still active
+    const now = new Date();
+    const endDate = new Date(product.end_at);
+    const isActive = product.is_sold === null && (endDate > now) && !product.closed_at;
+
+    if (!isActive) {
+      throw new Error('Cannot reject bidders on inactive products');
+    }
+
+    // 2. Check if bidder has actually bid on this product
+    const autoBid = await trx('auto_bidding')
+      .where('product_id', productId)
+      .where('bidder_id', bidderId)
+      .first();
+
+    if (!autoBid) {
+      throw new Error('This bidder has not placed a bid on this product');
+    }
+
+    // Get bidder info for email notification
+    const rejectedBidderInfo = await trx('users')
+      .where('id', bidderId)
+      .select('id', 'email', 'fullname')
+      .first();
+
+    const productInfo = {
+      id: product.id,
+      name: product.name,
+      seller_id: product.seller_id,
+      starting_price: product.starting_price,
+      step_price: product.step_price,
+      current_price: product.current_price,
+      highest_bidder_id: product.highest_bidder_id
+    };
+
+    const sellerInfo = await trx('users')
+      .where('id', sellerId)
+      .select('id', 'fullname')
+      .first();
+
+    // 3. Add to rejected_bidders table
+    await trx('rejected_bidders').insert({
+      product_id: productId,
+      bidder_id: bidderId,
+      seller_id: sellerId
+    }).onConflict(['product_id', 'bidder_id']).ignore();
+
+    // 4. Remove all bidding history of this bidder for this product
+    await trx('bidding_history')
+      .where('product_id', productId)
+      .where('bidder_id', bidderId)
+      .del();
+
+    // 5. Remove from auto_bidding
+    await trx('auto_bidding')
+      .where('product_id', productId)
+      .where('bidder_id', bidderId)
+      .del();
+
+    // 6. Recalculate highest bidder and current price
+    const allAutoBids = await trx('auto_bidding')
+      .where('product_id', productId)
+      .orderBy('max_price', 'desc');
+
+    const bidderIdNum = parseInt(bidderId);
+    const highestBidderIdNum = parseInt(product.highest_bidder_id);
+    const wasHighestBidder = (highestBidderIdNum === bidderIdNum);
+
+    if (allAutoBids.length === 0) {
+      // No more bidders - reset to starting state
+      await trx('products')
+        .where('id', productId)
+        .update({
+          highest_bidder_id: null,
+          current_price: product.starting_price,
+          highest_max_price: null
+        });
+    } else if (allAutoBids.length === 1) {
+      // Only one bidder left - they win at starting price (no competition)
+      const winner = allAutoBids[0];
+      const newPrice = product.starting_price;
+
+      await trx('products')
+        .where('id', productId)
+        .update({
+          highest_bidder_id: winner.bidder_id,
+          current_price: newPrice,
+          highest_max_price: winner.max_price
+        });
+
+      // Add history entry only if price changed
+      if (wasHighestBidder || product.current_price !== newPrice) {
+        await trx('bidding_history').insert({
+          product_id: productId,
+          bidder_id: winner.bidder_id,
+          current_price: newPrice
+        });
+      }
+    } else if (wasHighestBidder) {
+      // Multiple bidders and rejected was highest - recalculate price
+      const firstBidder = allAutoBids[0];
+      const secondBidder = allAutoBids[1];
+
+      // Current price should be minimum to beat second highest
+      let newPrice = secondBidder.max_price + product.step_price;
+
+      // But cannot exceed first bidder's max
+      if (newPrice > firstBidder.max_price) {
+        newPrice = firstBidder.max_price;
+      }
+
+      await trx('products')
+        .where('id', productId)
+        .update({
+          highest_bidder_id: firstBidder.bidder_id,
+          current_price: newPrice,
+          highest_max_price: firstBidder.max_price
+        });
+
+      // Add history entry only if price changed
+      const lastHistory = await trx('bidding_history')
+        .where('product_id', productId)
+        .orderBy('created_at', 'desc')
+        .first();
+
+      if (!lastHistory || lastHistory.current_price !== newPrice) {
+        await trx('bidding_history').insert({
+          product_id: productId,
+          bidder_id: firstBidder.bidder_id,
+          current_price: newPrice
+        });
+      }
+    }
+    // If rejected bidder was NOT the highest bidder and still multiple bidders left, 
+    // don't update anything - just removing them from auto_bidding is enough
+
+    return {
+      rejectedBidderInfo,
+      productInfo,
+      sellerInfo
+    };
+  });
+
+  return result;
+}
+
+/**
+ * Process a Buy Now purchase
+ * Immediately ends the auction and sets the buyer as winner
+ * 
+ * @param {Object} params - Buy Now parameters
+ * @param {number} params.userId - User making the purchase
+ * @param {number} params.productId - Product ID
+ * @returns {Promise<Object>} Result object with purchase outcome
+ * @throws {Error} If validation or business rules fail
+ */
+export async function buyNowPurchase({ userId, productId }) {
+  const result = await db.transaction(async (trx) => {
+    // 1. Get product information with lock
+    const product = await trx('products')
+      .where('id', productId)
+      .forUpdate() // Row-level lock
+      .first();
+
+    if (!product) {
+      throw new Error('Product not found');
+    }
+
+    // 2. Verify user is not the seller
+    if (product.seller_id === userId) {
+      throw new Error('You cannot buy your own product');
+    }
+
+    // 3. Check if product is still ACTIVE
+    const now = new Date();
+    const endDate = new Date(product.end_at);
+
+    if (product.is_sold !== null) {
+      throw new Error('Product is no longer available');
+    }
+
+    if (endDate <= now || product.closed_at) {
+      throw new Error('Auction has already ended');
+    }
+
+    // 4. Check if buy_now_price exists
+    if (!product.buy_now_price) {
+      throw new Error('Buy Now option is not available for this product');
+    }
+
+    const buyNowPrice = parseFloat(product.buy_now_price);
+
+    // 5. Check if bidder is rejected
+    const isRejected = await trx('rejected_bidders')
+      .where({ product_id: productId, bidder_id: userId })
+      .first();
+
+    if (isRejected) {
+      throw new Error('You have been rejected from bidding on this product');
+    }
+
+    // 6. Check if bidder is unrated and product doesn't allow unrated bidders
+    if (!product.allow_unrated_bidder) {
+      const ratingData = await reviewModel.calculateRatingPoint(userId);
+      const ratingPoint = ratingData ? ratingData.rating_point : 0;
+
+      if (ratingPoint === 0) {
+        throw new Error('This product does not allow bidders without ratings');
+      }
+    }
+
+    // 7. Close the auction immediately at buy now price
+    await trx('products')
+      .where('id', productId)
+      .update({
+        current_price: buyNowPrice,
+        highest_bidder_id: userId,
+        highest_max_price: buyNowPrice,
+        end_at: now,
+        closed_at: now,
+        is_buy_now_purchase: true
+      });
+
+    // 8. Create bidding history record marked as Buy Now
+    await trx('bidding_history').insert({
+      product_id: productId,
+      bidder_id: userId,
+      current_price: buyNowPrice,
+      is_buy_now: true
+    });
+
+    return {
+      productId,
+      userId,
+      buyNowPrice,
+      productName: product.name
+    };
+  });
+
+  return result;
+}
