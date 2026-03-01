@@ -507,90 +507,116 @@ export async function rejectBidder({ productId, bidderId, sellerId }) {
 }
 
 /**
+ * Validate Buy Now availability (KISS: Single responsibility)
+ */
+function validateBuyNowAvailability(product) {
+  const now = new Date();
+  const endDate = new Date(product.end_at);
+
+  if (product.is_sold !== null) {
+    throw new Error('Product is no longer available');
+  }
+
+  if (endDate <= now || product.closed_at) {
+    throw new Error('Auction has already ended');
+  }
+
+  if (!product.buy_now_price) {
+    throw new Error('Buy Now option is not available for this product');
+  }
+}
+
+/**
+ * Validate Buy Now permissions (KISS: Single responsibility)
+ */
+async function validateBuyNowPermissions(product, userId, trx) {
+  if (product.seller_id === userId) {
+    throw new Error('You cannot buy your own product');
+  }
+
+  const isRejected = await trx('rejected_bidders')
+    .where({ product_id: product.id, bidder_id: userId })
+    .first();
+
+  if (isRejected) {
+    throw new Error('You have been rejected from bidding on this product');
+  }
+}
+
+/**
+ * Validate Buy Now bidder rating (KISS: Single responsibility)
+ */
+async function validateBuyNowBidderRating(product, userId) {
+  if (!product.allow_unrated_bidder) {
+    const ratingData = await reviewModel.calculateRatingPoint(userId);
+    const ratingPoint = ratingData ? ratingData.rating_point : 0;
+
+    if (ratingPoint === 0) {
+      throw new Error('This product does not allow bidders without ratings');
+    }
+  }
+}
+
+/**
+ * Close auction with Buy Now purchase (KISS: Single responsibility)
+ */
+async function closeBuyNowAuction(trx, productId, userId, buyNowPrice) {
+  const now = new Date();
+
+  await trx('products')
+    .where('id', productId)
+    .update({
+      current_price: buyNowPrice,
+      highest_bidder_id: userId,
+      highest_max_price: buyNowPrice,
+      end_at: now,
+      closed_at: now,
+      is_buy_now_purchase: true
+    });
+
+  await trx('bidding_history').insert({
+    product_id: productId,
+    bidder_id: userId,
+    current_price: buyNowPrice,
+    is_buy_now: true
+  });
+}
+
+/**
  * Process a Buy Now purchase
  * Immediately ends the auction and sets the buyer as winner
+ * (KISS: Orchestration only - delegates to focused helper functions)
  * 
  * @param {Object} params - Buy Now parameters
  * @param {number} params.userId - User making the purchase
  * @param {number} params.productId - Product ID
+ * @param {Function} params.dbTransaction - Database transaction function (DIP: Dependency injection)
  * @returns {Promise<Object>} Result object with purchase outcome
  * @throws {Error} If validation or business rules fail
  */
-export async function buyNowPurchase({ userId, productId }) {
-  const result = await db.transaction(async (trx) => {
-    // 1. Get product information with lock
+export async function buyNowPurchase({ userId, productId, dbTransaction = db.transaction.bind(db) }) {
+  const result = await dbTransaction(async (trx) => {
+    // 1. Lock and load product
     const product = await trx('products')
       .where('id', productId)
-      .forUpdate() // Row-level lock
+      .forUpdate()
       .first();
 
     if (!product) {
       throw new Error('Product not found');
     }
 
-    // 2. Verify user is not the seller
-    if (product.seller_id === userId) {
-      throw new Error('You cannot buy your own product');
-    }
-
-    // 3. Check if product is still ACTIVE
-    const now = new Date();
-    const endDate = new Date(product.end_at);
-
-    if (product.is_sold !== null) {
-      throw new Error('Product is no longer available');
-    }
-
-    if (endDate <= now || product.closed_at) {
-      throw new Error('Auction has already ended');
-    }
-
-    // 4. Check if buy_now_price exists
-    if (!product.buy_now_price) {
-      throw new Error('Buy Now option is not available for this product');
-    }
-
     const buyNowPrice = parseFloat(product.buy_now_price);
 
-    // 5. Check if bidder is rejected
-    const isRejected = await trx('rejected_bidders')
-      .where({ product_id: productId, bidder_id: userId })
-      .first();
+    // 2. Validate availability and permissions (delegated to focused functions)
+    validateBuyNowAvailability(product);
+    await validateBuyNowPermissions(product, userId, trx);
+    await validateBuyNowBidderRating(product, userId);
 
-    if (isRejected) {
-      throw new Error('You have been rejected from bidding on this product');
-    }
+    // 3. Close auction with Buy Now
+    await closeBuyNowAuction(trx, productId, userId, buyNowPrice);
 
-    // 6. Check if bidder is unrated and product doesn't allow unrated bidders
-    if (!product.allow_unrated_bidder) {
-      const ratingData = await reviewModel.calculateRatingPoint(userId);
-      const ratingPoint = ratingData ? ratingData.rating_point : 0;
-
-      if (ratingPoint === 0) {
-        throw new Error('This product does not allow bidders without ratings');
-      }
-    }
-
-    // 7. Close the auction immediately at buy now price
-    await trx('products')
-      .where('id', productId)
-      .update({
-        current_price: buyNowPrice,
-        highest_bidder_id: userId,
-        highest_max_price: buyNowPrice,
-        end_at: now,
-        closed_at: now,
-        is_buy_now_purchase: true
-      });
-
-    // 8. Create bidding history record marked as Buy Now
-    await trx('bidding_history').insert({
-      product_id: productId,
-      bidder_id: userId,
-      current_price: buyNowPrice,
-      is_buy_now: true
-    });
-
+    // 4. Return result
     return {
       productId,
       userId,
