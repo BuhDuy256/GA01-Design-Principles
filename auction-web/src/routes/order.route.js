@@ -148,30 +148,20 @@ router.get('/:orderId/messages', isAuthenticated, requireOrderAccess(), async (r
     const orderId = req.params.orderId;
     const userId = req.session.authUser.id;
     
-    // Take raw messages from DB
-    const rawMessages = await orderService.getOrderMessages(orderId);
+    // Get formatted messages from service (data transformation handled there)
+    const messages = await orderService.getFormattedMessages(orderId, userId);
     
-    // Transform raw messages to view data (format date, determine sent/received)
-    const viewData = rawMessages.map(msg => ({
-      message: msg.message,
-      isSent: msg.sender_id === userId,
-      formattedDate: new Date(msg.created_at).toLocaleString('en-GB', {
-        hour: '2-digit', minute: '2-digit', second: '2-digit',
-        day: '2-digit', month: '2-digit', year: 'numeric'
-      })
-    }));
-
     // Render Handlebars partial to HTML string
     res.render('partials/chatMessages', { 
-        messages: viewData,
-        layout: false // Render without main layout since we only want the HTML snippet
+      messages,
+      layout: false
     }, (err, htmlString) => {
-        if (err) {
-            console.error('Lỗi render Handlebars:', err);
-            return res.status(500).json({ error: 'Lỗi tạo giao diện tin nhắn' });
-        }
-        
-        res.json({ success: true, messagesHtml: htmlString });
+      if (err) {
+        console.error('Render error:', err);
+        return res.status(500).json({ error: 'Failed to render messages' });
+      }
+      
+      res.json({ success: true, messagesHtml: htmlString });
     });
     
   } catch (error) {

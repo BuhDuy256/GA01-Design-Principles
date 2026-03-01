@@ -4,9 +4,38 @@ import * as productModel from '../models/product.model.js';
 import * as invoiceModel from '../models/invoice.model.js';
 import * as orderChatModel from '../models/orderChat.model.js';
 import {parsePostgresArray} from '../utils/dbHelpers.js';
+import {formatDateTimeForDisplay} from '../utils/dateFormatter.js';
 
+// Helper: Determine who is being reviewed (buyer reviews seller or vice versa)
+const getRevieweeId = (order, userId) => {
+    const isBuyer = order.buyer_id === userId;
+    return isBuyer ? order.seller_id : order.buyer_id;
+};
+
+// Helper: Upsert review (create or update)
+const upsertReview = async (userId, revieweeId, productId, ratingValue, comment) => {
+    const existingReview = await reviewModel.findByReviewerAndProduct(userId, productId);
+
+    if (existingReview) {
+        // Update existing review
+        await reviewModel.updateByReviewerAndProduct(userId, productId, {
+            rating: ratingValue,
+            comment: comment || null
+        });
+    } else {
+        // Create new review
+        await reviewModel.create({
+            reviewer_id: userId,
+            reviewed_user_id: revieweeId,
+            product_id: productId,
+            rating: ratingValue,
+            comment: comment || null
+        });
+    }
+};
+
+// Helper: Check if both parties completed reviews, then mark order as completed
 const checkAndCompleteOrder = async (order, userId) => {
-    
     const [buyerReview, sellerReview] = await Promise.all([
         reviewModel.getProductReview(order.buyer_id, order.seller_id, order.product_id),
         reviewModel.getProductReview(order.seller_id, order.buyer_id, order.product_id)
@@ -18,51 +47,25 @@ const checkAndCompleteOrder = async (order, userId) => {
     }
 };
 
-// Sumit rating and comment
+// Submit rating and comment
 export const submitRating = async (order, userId, rating, comment) => {
-    const isBuyer = order.buyer_id === userId;
-    const revieweeId = isBuyer ? order.seller_id : order.buyer_id;
+    const revieweeId = getRevieweeId(order, userId);
     const ratingValue = rating === 'positive' ? 1 : -1;
 
-    const existingReview = await reviewModel.findByReviewerAndProduct(userId, order.product_id);
-
-    if (existingReview) {
-        await reviewModel.updateByReviewerAndProduct(userId, order.product_id, {
-            rating: ratingValue,
-            comment: comment || null
-        });
-    } else {
-        await reviewModel.create({
-            reviewer_id: userId,
-            reviewed_user_id: revieweeId,
-            product_id: order.product_id,
-            rating: ratingValue,
-            comment: comment || null
-        });
-    }
-
-    // Reuse the same logic to check if we can complete the order
+    await upsertReview(userId, revieweeId, order.product_id, ratingValue, comment);
     await checkAndCompleteOrder(order, userId);
 };
 
 // Skip rating and complete transaction
 export const skipRating = async (order, userId) => {
-    const isBuyer = order.buyer_id === userId;
-    const revieweeId = isBuyer ? order.seller_id : order.buyer_id;
-
+    const revieweeId = getRevieweeId(order, userId);
     const existingReview = await reviewModel.findByReviewerAndProduct(userId, order.product_id);
 
+    // Only create skip record if not already reviewed
     if (!existingReview) {
-        await reviewModel.create({
-            reviewer_id: userId,
-            reviewed_user_id: revieweeId,
-            product_id: order.product_id,
-            rating: 0, // 0 = skipped
-            comment: null
-        });
+        await upsertReview(userId, revieweeId, order.product_id, 0, null); // 0 = skipped
     }
 
-    // Reuse the same logic to check if we can complete the order
     await checkAndCompleteOrder(order, userId);
 };
 
@@ -140,6 +143,17 @@ export const confirmDelivery = async (orderId, userId) => {
 
 export const getOrderMessages = async (orderId) => {
     return await orderChatModel.getMessagesByOrderId(orderId);
+};
+
+// Get formatted messages for display (with date formatting and sender identification)
+export const getFormattedMessages = async (orderId, userId) => {
+    const rawMessages = await orderChatModel.getMessagesByOrderId(orderId);
+    
+    return rawMessages.map(msg => ({
+        message: msg.message,
+        isSent: msg.sender_id === userId,
+        formattedDate: formatDateTimeForDisplay(msg.created_at)
+    }));
 };
 
 
