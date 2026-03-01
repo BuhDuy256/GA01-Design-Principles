@@ -143,7 +143,7 @@ if (product.seller_id !== sellerId) {
   throw new Error("Only the seller can reject bidders");
 }
 
-// In /unreject-bidder (lines 1210-1218)
+// In /unreject-bidder
 const product = await productModel.findByProductId2(productId, sellerId);
 if (!product) {
   throw new Error("Product not found");
@@ -152,7 +152,7 @@ if (product.seller_id !== sellerId) {
   throw new Error("Only the seller can unreject bidders");
 }
 
-// In /detail (lines 178-191) - Authorization check
+// In /detail - Authorization check
 const isSeller = product.seller_id === userId;
 const isHighestBidder = product.highest_bidder_id === userId;
 if (!isSeller && !isHighestBidder) {

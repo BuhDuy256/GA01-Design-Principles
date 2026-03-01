@@ -16,6 +16,7 @@ import { sendMail } from '../utils/mailer.js';
 import db from '../utils/db.js';
 import { parsePostgresArray } from '../utils/dbHelpers.js';
 import { paginate } from '../utils/pagination.js';
+import { ensureProductExists, ensureSellerOwnership, ensureCanViewProduct, ensureProductIsActive, ensureNotSeller } from '../utils/productAuthorization.js';
 import * as orderService from '../services/order.service.js';
 const router = express.Router();
 
@@ -119,9 +120,10 @@ router.get('/detail', async (req, res) => {
   const productId = req.query.id;
   const product = await productModel.findByProductId2(productId, userId);
 
-  // Kiểm tra nếu không tìm thấy sản phẩm
-  if (!product) {
-    return res.status(404).render('404', { message: 'Product not found' });
+  // Check if product exists
+  const productError = ensureProductExists(product, { throwError: false });
+  if (productError) {
+    return res.status(productError.status).render('404', { message: productError.message });
   }
   console.log('Product details:', product);
 
@@ -151,18 +153,9 @@ router.get('/detail', async (req, res) => {
   }
 
   // Authorization check: Non-ACTIVE products can only be viewed by seller or highest bidder
-  if (productStatus !== 'ACTIVE') {
-    if (!userId) {
-      // User not logged in, cannot view non-active products
-      return res.status(403).render('403', { message: 'You do not have permission to view this product' });
-    }
-
-    const isSeller = product.seller_id === userId;
-    const isHighestBidder = product.highest_bidder_id === userId;
-
-    if (!isSeller && !isHighestBidder) {
-      return res.status(403).render('403', { message: 'You do not have permission to view this product' });
-    }
+  const authError = ensureCanViewProduct(product, userId, productStatus);
+  if (authError) {
+    return res.status(authError.status).render('403', { message: authError.message });
   }
 
   // Pagination for comments
@@ -996,21 +989,10 @@ router.post('/reject-bidder', isAuthenticated, async (req, res) => {
         .forUpdate()
         .first();
 
-      if (!product) {
-        throw new Error('Product not found');
-      }
-
-      if (product.seller_id !== sellerId) {
-        throw new Error('Only the seller can reject bidders');
-      }
-
-      // Check product status - only allow rejection for ACTIVE products
-      const now = new Date();
-      const endDate = new Date(product.end_at);
-
-      if (product.is_sold !== null || endDate <= now || product.closed_at) {
-        throw new Error('Can only reject bidders for active auctions');
-      }
+      // Verify product exists and seller ownership
+      ensureProductExists(product);
+      ensureSellerOwnership(product, sellerId, 'reject bidders');
+      ensureProductIsActive(product, 'reject bidders');
 
       // 2. Check if bidder has actually bid on this product
       const autoBid = await trx('auto_bidding')
@@ -1189,21 +1171,10 @@ router.post('/unreject-bidder', isAuthenticated, async (req, res) => {
     // Verify product ownership
     const product = await productModel.findByProductId2(productId, sellerId);
 
-    if (!product) {
-      throw new Error('Product not found');
-    }
-
-    if (product.seller_id !== sellerId) {
-      throw new Error('Only the seller can unreject bidders');
-    }
-
-    // Check product status - only allow unrejection for ACTIVE products
-    const now = new Date();
-    const endDate = new Date(product.end_at);
-
-    if (product.is_sold !== null || endDate <= now || product.closed_at) {
-      throw new Error('Can only unreject bidders for active auctions');
-    }
+    // Verify product exists, seller ownership, and product is active
+    ensureProductExists(product);
+    ensureSellerOwnership(product, sellerId, 'unreject bidders');
+    ensureProductIsActive(product, 'unreject bidders');
 
     // Remove from rejected_bidders table
     await rejectedBidderModel.unrejectBidder(productId, bidderId);
@@ -1232,14 +1203,9 @@ router.post('/buy-now', isAuthenticated, async (req, res) => {
         .select('products.*', 'seller.fullname as seller_name')
         .first();
 
-      if (!product) {
-        throw new Error('Product not found');
-      }
-
-      // 2. Check if user is the seller
-      if (product.seller_id === userId) {
-        throw new Error('Seller cannot buy their own product');
-      }
+      // Verify product exists and user is not the seller
+      ensureProductExists(product);
+      ensureNotSeller(product, userId, 'buy their own product');
 
       // 3. Check if product is still ACTIVE
       const now = new Date();
