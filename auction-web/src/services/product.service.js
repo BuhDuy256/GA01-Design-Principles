@@ -171,7 +171,7 @@ const PRODUCT_STATUS_RULES = [
  * @param {Object} product - Product object
  * @returns {string} Product status (ACTIVE, SOLD, CANCELLED, PENDING, EXPIRED)
  */
-function determineProductStatus(product) {
+export function determineProductStatus(product) {
   const now = new Date();
   const endDate = new Date(product.end_at);
 
@@ -182,6 +182,16 @@ function determineProductStatus(product) {
 
   // Return matched status or default to ACTIVE
   return matchedRule ? matchedRule.status : 'ACTIVE';
+}
+
+/**
+ * Check if product is in ACTIVE status (DRY: reuses determineProductStatus)
+ * 
+ * @param {Object} product - Product object
+ * @returns {boolean} True if product is ACTIVE
+ */
+export function isProductActive(product) {
+  return determineProductStatus(product) === 'ACTIVE';
 }
 
 /**
@@ -312,12 +322,8 @@ export async function unrejectBidder({ productId, bidderId, sellerId }) {
     throw new Error('You do not own this product');
   }
 
-  // Check product is still active
-  const now = new Date();
-  const endDate = new Date(product.end_at);
-  const isActive = product.is_sold === null && (endDate > now) && !product.closed_at;
-
-  if (!isActive) {
+  // Check product is still active (DRY: reuses isProductActive)
+  if (!isProductActive(product)) {
     throw new Error('Cannot unreject bidders on inactive products');
   }
 

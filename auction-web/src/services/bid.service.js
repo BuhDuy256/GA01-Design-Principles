@@ -7,6 +7,7 @@ import db from '../utils/db.js';
 import * as reviewModel from '../models/review.model.js';
 import * as systemSettingModel from '../models/systemSetting.model.js';
 import { sendBidNotifications } from './email.service.js';
+import { isProductActive } from './product.service.js';
 
 /**
  * Validate user permissions to bid on product (KISS: Single responsibility)
@@ -324,12 +325,8 @@ export async function rejectBidder({ productId, bidderId, sellerId }) {
       throw new Error('You do not own this product');
     }
 
-    // Check product is still active
-    const now = new Date();
-    const endDate = new Date(product.end_at);
-    const isActive = product.is_sold === null && (endDate > now) && !product.closed_at;
-
-    if (!isActive) {
+    // Check product is still active (DRY: reuses isProductActive from product.service)
+    if (!isProductActive(product)) {
       throw new Error('Cannot reject bidders on inactive products');
     }
 
