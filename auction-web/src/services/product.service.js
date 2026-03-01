@@ -195,91 +195,128 @@ export function isProductActive(product) {
 }
 
 /**
+ * Auto-close expired auction (KISS: Single responsibility)
+ */
+async function autoCloseExpiredAuction(product, productId) {
+  const now = new Date();
+  const endDate = new Date(product.end_at);
+
+  if (endDate <= now && !product.closed_at && product.is_sold === null) {
+    await productModel.updateProduct(productId, { closed_at: endDate });
+    product.closed_at = endDate;
+  }
+}
+
+/**
+ * Load product-related data in parallel (KISS: Single responsibility)
+ */
+async function loadProductRelatedData(productId, commentsPerPage, offset) {
+  const [descriptionUpdates, biddingHistory, comments, totalComments, rejectedBidders, relatedProducts] =
+    await Promise.all([
+      productDescUpdateModel.findByProductId(productId),
+      biddingHistoryModel.getBiddingHistory(productId),
+      productCommentModel.getCommentsByProductId(productId, commentsPerPage, offset),
+      productCommentModel.countCommentsByProductId(productId),
+      rejectedBidderModel.getRejectedBidders(productId),
+      productModel.findRelatedProducts(productId)
+    ]);
+
+  return {
+    descriptionUpdates,
+    biddingHistory,
+    comments,
+    totalComments,
+    rejectedBidders,
+    relatedProducts
+  };
+}
+
+/**
+ * Enrich comments with their replies (KISS: Single responsibility)
+ * Loads all replies in one batch to avoid N+1 queries
+ */
+async function enrichCommentsWithReplies(comments) {
+  if (comments.length === 0) {
+    return;
+  }
+
+  const commentIds = comments.map(c => c.id);
+  const allReplies = await productCommentModel.getRepliesByCommentIds(commentIds);
+
+  // Group replies by parent comment id
+  const repliesMap = new Map();
+  for (const reply of allReplies) {
+    if (!repliesMap.has(reply.parent_id)) {
+      repliesMap.set(reply.parent_id, []);
+    }
+    repliesMap.get(reply.parent_id).push(reply);
+  }
+
+  // Attach replies to their parent comments
+  for (const comment of comments) {
+    comment.replies = repliesMap.get(comment.id) || [];
+  }
+}
+
+/**
+ * Load rating summaries for seller and bidder (KISS: Single responsibility)
+ */
+async function loadRatingSummaries(sellerId, bidderId) {
+  const sellerRatingSummary = await getUserRatingSummary(sellerId);
+
+  let bidderRatingSummary = { rating_point: null, reviews: [] };
+  if (bidderId) {
+    bidderRatingSummary = await getUserRatingSummary(bidderId);
+  }
+
+  return { sellerRatingSummary, bidderRatingSummary };
+}
+
+/**
  * Get complete product details with all related data
+ * (KISS: Orchestration only - delegates to focused helper functions)
+ * 
  * @param {Object} params - Request parameters
  * @returns {Promise<Object>} Complete product details
  */
 export async function getProductDetail({ productId, userId = null, commentPage = 1, commentsPerPage = 2 }) {
+  // 1. Load and validate product
   const product = await productModel.findByProductId2(productId, userId);
-
   if (!product) {
     const error = new Error('Product not found');
     error.code = 'PRODUCT_NOT_FOUND';
     throw error;
   }
 
-  const related_products = await productModel.findRelatedProducts(productId);
+  // 2. Auto-close if expired
+  await autoCloseExpiredAuction(product, productId);
 
-  // Determine product status
-  const now = new Date();
-  const endDate = new Date(product.end_at);
-
-  // Auto-close auction if time expired and not yet closed
-  if (endDate <= now && !product.closed_at && product.is_sold === null) {
-    await productModel.updateProduct(productId, { closed_at: endDate });
-    product.closed_at = endDate;
-  }
-
+  // 3. Determine status
   const productStatus = determineProductStatus(product);
 
-  // Pagination for comments
+  // 4. Load all related data
   const offset = (commentPage - 1) * commentsPerPage;
+  const relatedData = await loadProductRelatedData(productId, commentsPerPage, offset);
 
-  // Load description updates, bidding history, and comments in parallel
-  const [descriptionUpdates, biddingHistory, comments, totalComments] = await Promise.all([
-    productDescUpdateModel.findByProductId(productId),
-    biddingHistoryModel.getBiddingHistory(productId),
-    productCommentModel.getCommentsByProductId(productId, commentsPerPage, offset),
-    productCommentModel.countCommentsByProductId(productId)
-  ]);
+  // 5. Enrich comments with replies
+  await enrichCommentsWithReplies(relatedData.comments);
 
-  // Load rejected bidders (only for seller - will be filtered in route)
-  const rejectedBidders = await rejectedBidderModel.getRejectedBidders(productId);
+  // 6. Load rating summaries
+  const ratings = await loadRatingSummaries(product.seller_id, product.highest_bidder_id);
 
-  // Load replies for all comments in one batch to avoid N+1 query problem
-  if (comments.length > 0) {
-    const commentIds = comments.map(c => c.id);
-    const allReplies = await productCommentModel.getRepliesByCommentIds(commentIds);
-
-    // Group replies by parent comment id
-    const repliesMap = new Map();
-    for (const reply of allReplies) {
-      if (!repliesMap.has(reply.parent_id)) {
-        repliesMap.set(reply.parent_id, []);
-      }
-      repliesMap.get(reply.parent_id).push(reply);
-    }
-
-    // Attach replies to their parent comments
-    for (const comment of comments) {
-      comment.replies = repliesMap.get(comment.id) || [];
-    }
-  }
-
-  // Calculate total pages
-  const totalPages = Math.ceil(totalComments / commentsPerPage);
-
-  // Get seller rating
-  const sellerRatingSummary = await getUserRatingSummary(product.seller_id);
-
-  // Get bidder rating (if exists)
-  let bidderRatingSummary = { rating_point: null, reviews: [] };
-  if (product.highest_bidder_id) {
-    bidderRatingSummary = await getUserRatingSummary(product.highest_bidder_id);
-  }
-
+  // 7. Return complete product details
   return {
     product,
     productStatus,
-    descriptionUpdates,
-    biddingHistory,
-    rejectedBidders,
-    comments,
-    totalComments,
-    totalPages,
-    related_products,
-    sellerRatingSummary,
-    bidderRatingSummary
+    descriptionUpdates: relatedData.descriptionUpdates,
+    biddingHistory: relatedData.biddingHistory,
+    rejectedBidders: relatedData.rejectedBidders,
+    comments: relatedData.comments,
+    totalComments: relatedData.totalComments,
+    totalPages: Math.ceil(relatedData.totalComments / commentsPerPage),
+    related_products: relatedData.relatedProducts,
+    sellerRatingSummary: ratings.sellerRatingSummary,
+    bidderRatingSummary: ratings.bidderRatingSummary
   };
 }
 

@@ -299,8 +299,167 @@ export async function placeBid({ userId, productId, bidAmount, productUrl }) {
 }
 
 /**
+ * Validate bidder can be rejected (KISS: Single responsibility)
+ */
+async function validateBidderRejection(trx, productId, bidderId) {
+  const autoBid = await trx('auto_bidding')
+    .where('product_id', productId)
+    .where('bidder_id', bidderId)
+    .first();
+
+  if (!autoBid) {
+    throw new Error('This bidder has not placed a bid on this product');
+  }
+}
+
+/**
+ * Gather info for rejection notification (KISS: Single responsibility)
+ */
+async function gatherRejectionInfo(trx, product, bidderId, sellerId) {
+  const [rejectedBidderInfo, sellerInfo] = await Promise.all([
+    trx('users').where('id', bidderId).select('id', 'email', 'fullname').first(),
+    trx('users').where('id', sellerId).select('id', 'fullname').first()
+  ]);
+
+  const productInfo = {
+    id: product.id,
+    name: product.name,
+    seller_id: product.seller_id,
+    starting_price: product.starting_price,
+    step_price: product.step_price,
+    current_price: product.current_price,
+    highest_bidder_id: product.highest_bidder_id
+  };
+
+  return { rejectedBidderInfo, productInfo, sellerInfo };
+}
+
+/**
+ * Remove bidder from all bidding tables (KISS: Single responsibility)
+ */
+async function removeBidderFromProduct(trx, productId, bidderId, sellerId) {
+  await Promise.all([
+    // Add to rejected_bidders table
+    trx('rejected_bidders').insert({
+      product_id: productId,
+      bidder_id: bidderId,
+      seller_id: sellerId
+    }).onConflict(['product_id', 'bidder_id']).ignore(),
+
+    // Remove bidding history
+    trx('bidding_history')
+      .where('product_id', productId)
+      .where('bidder_id', bidderId)
+      .del(),
+
+    // Remove from auto_bidding
+    trx('auto_bidding')
+      .where('product_id', productId)
+      .where('bidder_id', bidderId)
+      .del()
+  ]);
+}
+
+/**
+ * Reset product to starting state (no bidders) (KISS: Single responsibility)
+ */
+async function resetProductToStartingState(trx, productId, startingPrice) {
+  await trx('products')
+    .where('id', productId)
+    .update({
+      highest_bidder_id: null,
+      current_price: startingPrice,
+      highest_max_price: null
+    });
+}
+
+/**
+ * Set single winner at starting price (KISS: Single responsibility)
+ */
+async function setWinnerAtStartingPrice(trx, productId, winner, startingPrice, shouldAddHistory) {
+  await trx('products')
+    .where('id', productId)
+    .update({
+      highest_bidder_id: winner.bidder_id,
+      current_price: startingPrice,
+      highest_max_price: winner.max_price
+    });
+
+  if (shouldAddHistory) {
+    await trx('bidding_history').insert({
+      product_id: productId,
+      bidder_id: winner.bidder_id,
+      current_price: startingPrice
+    });
+  }
+}
+
+/**
+ * Recalculate competitive bidding price (KISS: Single responsibility)
+ */
+async function recalculateCompetitiveBidding(trx, productId, product, firstBidder, secondBidder) {
+  // Calculate new price: minimum to beat second highest
+  let newPrice = secondBidder.max_price + product.step_price;
+
+  // Cannot exceed first bidder's max
+  if (newPrice > firstBidder.max_price) {
+    newPrice = firstBidder.max_price;
+  }
+
+  await trx('products')
+    .where('id', productId)
+    .update({
+      highest_bidder_id: firstBidder.bidder_id,
+      current_price: newPrice,
+      highest_max_price: firstBidder.max_price
+    });
+
+  // Add history entry only if price changed
+  const lastHistory = await trx('bidding_history')
+    .where('product_id', productId)
+    .orderBy('created_at', 'desc')
+    .first();
+
+  if (!lastHistory || lastHistory.current_price !== newPrice) {
+    await trx('bidding_history').insert({
+      product_id: productId,
+      bidder_id: firstBidder.bidder_id,
+      current_price: newPrice
+    });
+  }
+}
+
+/**
+ * Recalculate auction state after bidder removal (KISS: Orchestrates sub-functions)
+ */
+async function recalculateAuctionState(trx, productId, product, bidderId) {
+  const allAutoBids = await trx('auto_bidding')
+    .where('product_id', productId)
+    .orderBy('max_price', 'desc');
+
+  const bidderIdNum = parseInt(bidderId);
+  const highestBidderIdNum = parseInt(product.highest_bidder_id);
+  const wasHighestBidder = (highestBidderIdNum === bidderIdNum);
+
+  if (allAutoBids.length === 0) {
+    // No more bidders - reset to starting state
+    await resetProductToStartingState(trx, productId, product.starting_price);
+  } else if (allAutoBids.length === 1) {
+    // Only one bidder left - they win at starting price (no competition)
+    const shouldAddHistory = wasHighestBidder || product.current_price !== product.starting_price;
+    await setWinnerAtStartingPrice(trx, productId, allAutoBids[0], product.starting_price, shouldAddHistory);
+  } else if (wasHighestBidder) {
+    // Multiple bidders and rejected was highest - recalculate competitive bidding
+    await recalculateCompetitiveBidding(trx, productId, product, allAutoBids[0], allAutoBids[1]);
+  }
+  // If rejected bidder was NOT the highest bidder and multiple bidders remain,
+  // no updates needed - removal from auto_bidding is sufficient
+}
+
+/**
  * Reject a bidder from a product
  * Removes all their bids and recalculates the auction state
+ * (KISS: Orchestration only - delegates to focused helper functions)
  * 
  * @param {Object} params - Rejection parameters
  * @param {number} params.productId - Product ID
@@ -325,143 +484,23 @@ export async function rejectBidder({ productId, bidderId, sellerId }) {
       throw new Error('You do not own this product');
     }
 
-    // Check product is still active (DRY: reuses isProductActive from product.service)
     if (!isProductActive(product)) {
       throw new Error('Cannot reject bidders on inactive products');
     }
 
-    // 2. Check if bidder has actually bid on this product
-    const autoBid = await trx('auto_bidding')
-      .where('product_id', productId)
-      .where('bidder_id', bidderId)
-      .first();
+    // 2. Validate bidder has bid on this product
+    await validateBidderRejection(trx, productId, bidderId);
 
-    if (!autoBid) {
-      throw new Error('This bidder has not placed a bid on this product');
-    }
+    // 3. Gather info for notifications
+    const info = await gatherRejectionInfo(trx, product, bidderId, sellerId);
 
-    // Get bidder info for email notification
-    const rejectedBidderInfo = await trx('users')
-      .where('id', bidderId)
-      .select('id', 'email', 'fullname')
-      .first();
+    // 4. Remove bidder from all tables
+    await removeBidderFromProduct(trx, productId, bidderId, sellerId);
 
-    const productInfo = {
-      id: product.id,
-      name: product.name,
-      seller_id: product.seller_id,
-      starting_price: product.starting_price,
-      step_price: product.step_price,
-      current_price: product.current_price,
-      highest_bidder_id: product.highest_bidder_id
-    };
+    // 5. Recalculate auction state
+    await recalculateAuctionState(trx, productId, product, bidderId);
 
-    const sellerInfo = await trx('users')
-      .where('id', sellerId)
-      .select('id', 'fullname')
-      .first();
-
-    // 3. Add to rejected_bidders table
-    await trx('rejected_bidders').insert({
-      product_id: productId,
-      bidder_id: bidderId,
-      seller_id: sellerId
-    }).onConflict(['product_id', 'bidder_id']).ignore();
-
-    // 4. Remove all bidding history of this bidder for this product
-    await trx('bidding_history')
-      .where('product_id', productId)
-      .where('bidder_id', bidderId)
-      .del();
-
-    // 5. Remove from auto_bidding
-    await trx('auto_bidding')
-      .where('product_id', productId)
-      .where('bidder_id', bidderId)
-      .del();
-
-    // 6. Recalculate highest bidder and current price
-    const allAutoBids = await trx('auto_bidding')
-      .where('product_id', productId)
-      .orderBy('max_price', 'desc');
-
-    const bidderIdNum = parseInt(bidderId);
-    const highestBidderIdNum = parseInt(product.highest_bidder_id);
-    const wasHighestBidder = (highestBidderIdNum === bidderIdNum);
-
-    if (allAutoBids.length === 0) {
-      // No more bidders - reset to starting state
-      await trx('products')
-        .where('id', productId)
-        .update({
-          highest_bidder_id: null,
-          current_price: product.starting_price,
-          highest_max_price: null
-        });
-    } else if (allAutoBids.length === 1) {
-      // Only one bidder left - they win at starting price (no competition)
-      const winner = allAutoBids[0];
-      const newPrice = product.starting_price;
-
-      await trx('products')
-        .where('id', productId)
-        .update({
-          highest_bidder_id: winner.bidder_id,
-          current_price: newPrice,
-          highest_max_price: winner.max_price
-        });
-
-      // Add history entry only if price changed
-      if (wasHighestBidder || product.current_price !== newPrice) {
-        await trx('bidding_history').insert({
-          product_id: productId,
-          bidder_id: winner.bidder_id,
-          current_price: newPrice
-        });
-      }
-    } else if (wasHighestBidder) {
-      // Multiple bidders and rejected was highest - recalculate price
-      const firstBidder = allAutoBids[0];
-      const secondBidder = allAutoBids[1];
-
-      // Current price should be minimum to beat second highest
-      let newPrice = secondBidder.max_price + product.step_price;
-
-      // But cannot exceed first bidder's max
-      if (newPrice > firstBidder.max_price) {
-        newPrice = firstBidder.max_price;
-      }
-
-      await trx('products')
-        .where('id', productId)
-        .update({
-          highest_bidder_id: firstBidder.bidder_id,
-          current_price: newPrice,
-          highest_max_price: firstBidder.max_price
-        });
-
-      // Add history entry only if price changed
-      const lastHistory = await trx('bidding_history')
-        .where('product_id', productId)
-        .orderBy('created_at', 'desc')
-        .first();
-
-      if (!lastHistory || lastHistory.current_price !== newPrice) {
-        await trx('bidding_history').insert({
-          product_id: productId,
-          bidder_id: firstBidder.bidder_id,
-          current_price: newPrice
-        });
-      }
-    }
-    // If rejected bidder was NOT the highest bidder and still multiple bidders left, 
-    // don't update anything - just removing them from auto_bidding is enough
-
-    return {
-      rejectedBidderInfo,
-      productInfo,
-      sellerInfo
-    };
+    return info;
   });
 
   return result;
