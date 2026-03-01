@@ -1,0 +1,612 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`Seller Routes - Snapshot Tests DELETE /seller/products/description-updates/:updateId ERROR: should return 403 for unauthorized deletion: json-response 1`] = `
+{
+  "message": "Unauthorized",
+  "success": false,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests DELETE /seller/products/description-updates/:updateId ERROR: should return 403 for unauthorized deletion: status-code 1`] = `403`;
+
+exports[`Seller Routes - Snapshot Tests DELETE /seller/products/description-updates/:updateId ERROR: should return 404 for non-existent update: json-response 1`] = `
+{
+  "message": "Update not found",
+  "success": false,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests DELETE /seller/products/description-updates/:updateId ERROR: should return 404 for non-existent update: status-code 1`] = `404`;
+
+exports[`Seller Routes - Snapshot Tests DELETE /seller/products/description-updates/:updateId SUCCESS: should delete description update: json-response 1`] = `
+{
+  "message": "Update deleted successfully",
+  "success": true,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests DELETE /seller/products/description-updates/:updateId SUCCESS: should delete description update: status-code 1`] = `200`;
+
+exports[`Seller Routes - Snapshot Tests DELETE /seller/products/description-updates/:updateId UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests DELETE /seller/products/description-updates/:updateId UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller FORBIDDEN: should show 403 for non-seller: html-content 1`] = `
+"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Auction</title>
+
+    <!-- Common CSS -->
+    <link rel="stylesheet" type="text/css" href="/static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" type="text/css" href="/static/css/layouts/main.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@9/swiper-bundle.min.css" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+
+    <!-- Modernizr -->
+    <script src="/static/js/modernizr.js"></script>
+
+    
+    
+    <!-- CSS riêng cho Admin nếu đang ở chế độ Admin -->
+    <link rel="stylesheet" type="text/css" href="/static/css/client-sidebar.css">
+    </head>
+
+<body data-bs-spy="scroll" data-bs-target="#navbar" tabindex="0" class="d-flex flex-column min-vh-100">
+
+    <!-- SVG icons -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+      <symbol id="search" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+        <title>Search</title>
+        <path fill="currentColor"
+              d="M19 3C13.488 3 9 7.488 9 13c0 2.395.84 4.59 2.25 6.313L3.281 27.28l1.439 1.44l7.968-7.969A9.922 9.922 0 0 0 19 23c5.512 0 10-4.488 10-10S24.512 3 19 3zm0 2c4.43 0 8 3.57 8 8s-3.57 8-8 8s-8-3.57-8-8s3.57-8 8-8z" />
+      </symbol>
+    
+      <symbol xmlns="http://www.w3.org/2000/svg" id="user" viewBox="0 0 16 16">
+        <path
+          d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1H3Zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+      </symbol>
+    
+      <symbol xmlns="http://www.w3.org/2000/svg" id="cart" viewBox="0 0 16 16">
+        <path
+          d="M0 1.5A.5.5 0 0 1 .5 1H2a.5.5 0 0 1 .485.379L2.89 3H14.5a.5.5 0 0 1 .491.592l-1.5 8A.5.5 0 0 1 13 12H4a.5.5 0 0 1-.491-.408L2.01 3.607 1.61 2H.5a.5.5 0 0 1-.5-.5zM5 12a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm7 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-7 1a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
+      </symbol>
+    
+      <symbol xmlns="http://www.w3.org/2000/svg" id="chevron-left" viewBox="0 0 16 16">
+        <path fill-rule="evenodd"
+              d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z" />
+      </symbol>
+    
+      <symbol xmlns="http://www.w3.org/2000/svg" id="chevron-right" viewBox="0 0 16 16">
+        <path fill-rule="evenodd"
+              d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z" />
+      </symbol>
+    
+      <symbol xmlns="http://www.w3.org/2000/svg" id="navbar-icon" viewBox="0 0 16 16">
+        <path
+          d="M14 10.5a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0 0 1h3a.5.5 0 0 0 .5-.5zm0-3a.5.5 0 0 0-.5-.5h-7a.5.5 0 0 0 0 1h7a.5.5 0 0 0 .5-.5zm0-3a.5.5 0 0 0-.5-.5h-11a.5.5 0 0 0 0 1h11a.5.5 0 0 0 .5-.5z" />
+      </symbol>
+    
+      <symbol xmlns="http://www.w3.org/2000/svg" id="close" viewBox="0 0 16 16">
+        <path
+          d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z" />
+      </symbol>
+    </svg>    
+    <header id="header" class="site-header header-scrolled position-fixed text-black bg-light w-100 shadow-sm">
+      <nav id="header-nav" class="navbar navbar-expand-lg px-3">
+        <div class="container-fluid">
+    
+          <!-- Logo -->
+          <a class="navbar-brand d-flex align-items-center" href="/">
+            <img src="/static/images/main-logo.png" class="logo" alt="Ministore">
+          </a>
+    
+          <!-- Toggler -->
+          <button class="navbar-toggler d-flex d-lg-none order-3 p-2"
+                  type="button"
+                  data-bs-toggle="offcanvas"
+                  data-bs-target="#bdNavbar"
+                  aria-controls="bdNavbar"
+                  aria-expanded="false"
+                  aria-label="Toggle navigation">
+            <svg class="navbar-icon">
+              <use xlink:href="#navbar-icon"></use>
+            </svg>
+          </button>
+    
+          <!-- Offcanvas / Navbar content -->
+          <div class="offcanvas offcanvas-end" tabindex="-1" id="bdNavbar"
+               aria-labelledby="bdNavbarOffcanvasLabel">
+            <div class="offcanvas-header px-4 pb-0">
+              <a class="navbar-brand d-flex align-items-center" href="/">
+                <img src="/static/images/main-logo.png" class="logo" alt="Online Auction">
+              </a>
+              <button type="button"
+                      class="btn-close btn-close-black"
+                      data-bs-dismiss="offcanvas"
+                      aria-label="Close"
+                      data-bs-target="#bdNavbar"></button>
+            </div>
+    
+            <div class="offcanvas-body">
+              <!-- LEFT: main nav items -->
+              <ul id="navbar"
+                  class="navbar-nav text-uppercase align-items-lg-center flex-grow-1 mb-2 mb-lg-0">
+                <li class="nav-item">
+                  <a class="nav-link me-lg-4 active" href="/">Home</a>
+                </li>
+    
+                <!-- Categories dropdown -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link me-lg-4 dropdown-toggle"
+                     href="#"
+                     role="button"
+                     data-bs-toggle="dropdown"
+                     aria-expanded="false">
+                    Categories
+                  </a>
+                  <ul class="dropdown-menu dropdown-menu-lg">
+                  </ul>
+                </li>
+              </ul>
+    
+              <!-- RIGHT: search + sign in -->
+              <div class="d-flex align-items-center justify-content-lg-end gap-3 mt-3 mt-lg-0">
+                <button type="button" class="btn btn-link p-0 search-button text-decoration-none" data-bs-toggle="modal" data-bs-target="#searchModal">
+                  <svg class="search" width="20" height="20">
+                    <use xlink:href="#search"></use>
+                  </svg>
+                </button>
+                  <a href="/account/profile" class="btn-sign-in">
+                    <span class="text-container">
+                      <span class="text">Hi, Regular User</span>
+                    </span>
+                  </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+    <main id="main-content" style="padding-top: 100px;">
+        <div class="container mt-5 mb-5">
+  <!-- Flash Messages -->
+
+
+  <div class="card shadow-sm">
+    <div class="card-header bg-danger text-white">
+      <h5 class="mb-0"><i class="bi bi-shield-x me-2"></i>403 - Access Denied</h5>
+    </div>
+    <div class="card-body text-center py-5">
+      <i class="bi bi-lock-fill text-danger" style="font-size: 5rem; opacity: 0.3;"></i>
+      <h4 class="card-title mt-4 mb-3">Access Denied</h4>
+      <p class="card-text text-muted mb-4">You do not have permission to access this page.</p>
+      <a href="/" class="btn btn-primary">
+        <i class="bi bi-house-door me-2"></i>Return to Home
+      </a>
+    </div>
+  </div>
+</div>
+    </main>
+
+    <footer id="footer" class="py-5 bg-dark text-white mt-auto">
+      <div class="container">
+        <div class="row">
+          <div class="col-md-4 mb-3">
+            <h5 class="text-uppercase mb-3">Online Auction</h5>
+            <p class="small text-muted">The best place to find and bid on unique items.</p>
+          </div>
+          <div class="col-md-4 mb-3">
+            <h5 class="text-uppercase mb-3">Quick Links</h5>
+            <ul class="list-unstyled small">
+              <li><a href="/" class="text-decoration-none text-muted">Home</a></li>
+              <li><a href="#" class="text-decoration-none text-muted">About Us</a></li>
+              <li><a href="#" class="text-decoration-none text-muted">Terms of Service</a></li>
+            </ul>
+          </div>
+          <div class="col-md-4 mb-3">
+            <h5 class="text-uppercase mb-3">Contact</h5>
+            <p class="small text-muted">Email: support@auction.com</p>
+            <p class="small text-muted">Phone: +84 123 456 789</p>
+          </div>
+        </div>
+        <div class="border-top border-secondary pt-4 text-center small text-muted">
+          &copy; 2025 Online Auction. All rights reserved.
+        </div>
+      </div>
+    </footer>
+    <!-- Search Modal (Chỉ cần cho Client) -->
+    <div class="modal fade" id="searchModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header border-0 pb-2" style="background: linear-gradient(135deg, #72AEC8 0%, #5a9bb8 100%); color: white;">
+                    <h5 class="modal-title fw-bold">
+                        <i class="bi bi-search me-2"></i>Search Products
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <form action="/products/search" method="GET">
+                        <!-- Search Input -->
+                        <div class="mb-4">
+                            <label for="searchInput" class="form-label fw-bold">
+                                <i class="bi bi-pencil-square me-1" style="color: #72AEC8;"></i>Search Keywords
+                            </label>
+                            <input class="form-control form-control-lg" type="search" name="q" 
+                                placeholder="Type product name or category..." id="searchInput" autofocus required>
+                        </div>
+
+                        <!-- Search Logic -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">
+                                <i class="bi bi-filter me-1" style="color: #72AEC8;"></i>Search Mode
+                            </label>
+                            <div class="d-flex gap-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="logic" id="logicAnd" value="and" checked>
+                                    <label class="form-check-label" for="logicAnd">
+                                        <strong>AND</strong> 
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="logic" id="logicOr" value="or">
+                                    <label class="form-check-label" for="logicOr">
+                                        <strong>OR</strong>
+                                    </label>
+                                </div>
+                            </div>
+                            <small class="text-muted d-block mt-2">
+                                <i class="bi bi-info-circle"></i> 
+                                <strong>AND:</strong> Results must contain all keywords. 
+                                <strong>OR:</strong> Results contain at least one keyword.
+                            </small>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-lg fw-bold flex-fill shadow-sm" type="submit"
+                                style="background: linear-gradient(135deg, #72AEC8 0%, #5a9bb8 100%); color: white; border: none;">
+                                <i class="bi bi-search me-2"></i>Search
+                            </button>
+                            <button class="btn btn-lg btn-outline-secondary" type="button" data-bs-dismiss="modal">
+                                <i class="bi bi-x-circle me-1"></i>Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/jquery-1.11.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/swiper/swiper-bundle.min.js"></script>
+    <script type="text/javascript" src="/static/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script type="text/javascript" src="/static/js/script.js"></script>
+
+    
+    
+    <script>
+      const searchModal = document.getElementById('searchModal')
+      const searchInput = document.getElementById('searchInput')
+      if (searchModal && searchInput) {
+        searchModal.addEventListener('shown.bs.modal', () => searchInput.focus())
+      }
+    </script>
+</body>
+</html>"
+`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller FORBIDDEN: should show 403 for non-seller: status-code 1`] = `200`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/:id/description-updates ERROR: should return 403 for unauthorized access: json-response 1`] = `
+{
+  "message": "Unauthorized",
+  "success": false,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/:id/description-updates ERROR: should return 403 for unauthorized access: status-code 1`] = `403`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/:id/description-updates ERROR: should return 404 for non-existent product: json-response 1`] = `
+{
+  "message": "Product not found",
+  "success": false,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/:id/description-updates ERROR: should return 404 for non-existent product: status-code 1`] = `404`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/:id/description-updates SUCCESS: should return description updates: json-response 1`] = `
+{
+  "success": true,
+  "updates": [
+    {
+      "content": "Added more details about the lens",
+      "created_at": "2024-01-02T00:00:00.000Z",
+      "id": 1,
+      "product_id": 101,
+    },
+  ],
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/:id/description-updates SUCCESS: should return description updates: status-code 1`] = `200`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/:id/description-updates UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/:id/description-updates UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/active UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/active UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/add UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/add UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/expired UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/expired UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/pending UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/pending UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/sold UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests GET /seller/products/sold UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/append-description ERROR: should return 400 for empty description: json-response 1`] = `
+{
+  "message": "Description is required",
+  "success": false,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/append-description ERROR: should return 400 for empty description: status-code 1`] = `400`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/append-description ERROR: should return 403 for unauthorized append: json-response 1`] = `
+{
+  "message": "Unauthorized",
+  "success": false,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/append-description ERROR: should return 403 for unauthorized append: status-code 1`] = `403`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/append-description ERROR: should return 404 for non-existent product: json-response 1`] = `
+{
+  "message": "Product not found",
+  "success": false,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/append-description ERROR: should return 404 for non-existent product: status-code 1`] = `404`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/append-description SUCCESS: should append description and send notifications: json-response 1`] = `
+{
+  "message": "Description appended successfully",
+  "success": true,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/append-description SUCCESS: should append description and send notifications: status-code 1`] = `200`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/append-description UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/append-description UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/cancel ERROR: should return 403 for unauthorized cancellation: json-response 1`] = `
+{
+  "message": "Unauthorized",
+  "success": false,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/cancel ERROR: should return 403 for unauthorized cancellation: status-code 1`] = `403`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/cancel ERROR: should return 404 for non-existent product: json-response 1`] = `
+{
+  "message": "Product not found",
+  "success": false,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/cancel ERROR: should return 404 for non-existent product: status-code 1`] = `404`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/cancel SUCCESS: should cancel product with bidder rating: json-response 1`] = `
+{
+  "message": "Auction cancelled successfully",
+  "success": true,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/cancel SUCCESS: should cancel product with bidder rating: status-code 1`] = `200`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/cancel SUCCESS: should cancel product without bidder: json-response 1`] = `
+{
+  "message": "Auction cancelled successfully",
+  "success": true,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/cancel SUCCESS: should cancel product without bidder: status-code 1`] = `200`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/cancel UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/cancel UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/rate ERROR: should return 400 when no bidder to rate: json-response 1`] = `
+{
+  "message": "No bidder to rate",
+  "success": false,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/rate ERROR: should return 400 when no bidder to rate: status-code 1`] = `400`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/rate SUCCESS: should create new negative rating: json-response 1`] = `
+{
+  "message": "Rating submitted successfully",
+  "success": true,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/rate SUCCESS: should create new negative rating: status-code 1`] = `200`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/rate SUCCESS: should create new positive rating: json-response 1`] = `
+{
+  "message": "Rating submitted successfully",
+  "success": true,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/rate SUCCESS: should create new positive rating: status-code 1`] = `200`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/rate SUCCESS: should update existing rating: json-response 1`] = `
+{
+  "message": "Rating submitted successfully",
+  "success": true,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/rate SUCCESS: should update existing rating: status-code 1`] = `200`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/rate UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/:id/rate UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/upload-subimages SUCCESS: should upload subimages and return files info: json-response 1`] = `
+{
+  "files": [
+    {
+      "destination": "public/uploads/",
+      "encoding": "7bit",
+      "fieldname": "images",
+      "filename": "1704067200000-987654321-test-image-1.jpg",
+      "mimetype": "image/jpeg",
+      "originalname": "test-image-1.jpg",
+      "path": "public/uploads/1704067200000-987654321-test-image-1.jpg",
+      "size": 45000,
+    },
+    {
+      "destination": "public/uploads/",
+      "encoding": "7bit",
+      "fieldname": "images",
+      "filename": "1704067200000-555555555-test-image-2.jpg",
+      "mimetype": "image/jpeg",
+      "originalname": "test-image-2.jpg",
+      "path": "public/uploads/1704067200000-555555555-test-image-2.jpg",
+      "size": 48000,
+    },
+  ],
+  "success": true,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/upload-subimages SUCCESS: should upload subimages and return files info: status-code 1`] = `200`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/upload-subimages UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/upload-subimages UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/upload-thumbnail SUCCESS: should upload thumbnail and return file info: json-response 1`] = `
+{
+  "file": {
+    "destination": "public/uploads/",
+    "encoding": "7bit",
+    "fieldname": "thumbnail",
+    "filename": "1704067200000-123456789-test-thumbnail.jpg",
+    "mimetype": "image/jpeg",
+    "originalname": "test-thumbnail.jpg",
+    "path": "public/uploads/1704067200000-123456789-test-thumbnail.jpg",
+    "size": 50000,
+  },
+  "success": true,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/upload-thumbnail SUCCESS: should upload thumbnail and return file info: status-code 1`] = `200`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/upload-thumbnail UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests POST /seller/products/upload-thumbnail UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/:id/rate ERROR: should return 400 when no bidder to rate: json-response 1`] = `
+{
+  "message": "No bidder to rate",
+  "success": false,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/:id/rate ERROR: should return 400 when no bidder to rate: status-code 1`] = `400`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/:id/rate SUCCESS: should update bidder rating: json-response 1`] = `
+{
+  "message": "Rating updated successfully",
+  "success": true,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/:id/rate SUCCESS: should update bidder rating: status-code 1`] = `200`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/:id/rate UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/:id/rate UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/description-updates/:updateId ERROR: should return 400 for empty content: json-response 1`] = `
+{
+  "message": "Content is required",
+  "success": false,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/description-updates/:updateId ERROR: should return 400 for empty content: status-code 1`] = `400`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/description-updates/:updateId ERROR: should return 403 for unauthorized update: json-response 1`] = `
+{
+  "message": "Unauthorized",
+  "success": false,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/description-updates/:updateId ERROR: should return 403 for unauthorized update: status-code 1`] = `403`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/description-updates/:updateId ERROR: should return 404 for non-existent update: json-response 1`] = `
+{
+  "message": "Update not found",
+  "success": false,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/description-updates/:updateId ERROR: should return 404 for non-existent update: status-code 1`] = `404`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/description-updates/:updateId SUCCESS: should update description content: json-response 1`] = `
+{
+  "message": "Update saved successfully",
+  "success": true,
+}
+`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/description-updates/:updateId SUCCESS: should update description content: status-code 1`] = `200`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/description-updates/:updateId UNAUTHORIZED: should redirect when not authenticated: redirect-location 1`] = `"/account/signin"`;
+
+exports[`Seller Routes - Snapshot Tests PUT /seller/products/description-updates/:updateId UNAUTHORIZED: should redirect when not authenticated: status-code 1`] = `302`;
