@@ -100,16 +100,16 @@ export async function getWonAuctionsByBidderId(bidderId) {
     .leftJoin('categories', 'products.category_id', 'categories.id')
     .leftJoin('users as seller', 'products.seller_id', 'seller.id')
     .where('products.highest_bidder_id', bidderId)
-    .where(function() {
-      this.where(function() {
+    .where(function () {
+      this.where(function () {
         // Pending: (end_at <= NOW OR closed_at) AND is_sold IS NULL
-        this.where(function() {
+        this.where(function () {
           this.where('products.end_at', '<=', new Date())
             .orWhereNotNull('products.closed_at');
         }).whereNull('products.is_sold');
       })
-      .orWhere('products.is_sold', true)   // Sold
-      .orWhere('products.is_sold', false); // Cancelled
+        .orWhere('products.is_sold', true)   // Sold
+        .orWhere('products.is_sold', false); // Cancelled
     })
     .select(
       'products.*',
@@ -132,4 +132,63 @@ export async function getWonAuctionsByBidderId(bidderId) {
       `)
     )
     .orderBy('products.end_at', 'desc');
+}
+
+// ===================== TRANSACTION SUPPORT =====================
+
+/**
+ * Get auto bid for a specific bidder (with transaction support)
+ * @param {Object} trx - Knex transaction object
+ * @param {number} productId - Product ID
+ * @param {number} bidderId - Bidder ID
+ * @returns {Promise<Object>} Auto bid record
+ */
+export async function getAutoBidTrx(trx, productId, bidderId) {
+  return trx('auto_bidding')
+    .where({ product_id: productId, bidder_id: bidderId })
+    .first();
+}
+
+/**
+ * Get all auto bids for a product (with transaction support)
+ * @param {Object} trx - Knex transaction object
+ * @param {number} productId - Product ID
+ * @returns {Promise<Array>} List of auto bids ordered by max_price descending
+ */
+export async function getAllAutoBidsTrx(trx, productId) {
+  return trx('auto_bidding')
+    .where('product_id', productId)
+    .orderBy('max_price', 'desc');
+}
+
+/**
+ * Upsert auto bid (with transaction support)
+ * @param {Object} trx - Knex transaction object
+ * @param {number} productId - Product ID
+ * @param {number} bidderId - Bidder ID
+ * @param {number} maxPrice - Max price
+ * @returns {Promise} Upsert result
+ */
+export async function upsertAutoBidTrx(trx, productId, bidderId, maxPrice) {
+  return trx.raw(`
+    INSERT INTO auto_bidding (product_id, bidder_id, max_price)
+    VALUES (?, ?, ?)
+    ON CONFLICT (product_id, bidder_id)
+    DO UPDATE SET 
+      max_price = EXCLUDED.max_price,
+      created_at = NOW()
+  `, [productId, bidderId, maxPrice]);
+}
+
+/**
+ * Delete auto bid (with transaction support)
+ * @param {Object} trx - Knex transaction object
+ * @param {number} productId - Product ID
+ * @param {number} bidderId - Bidder ID
+ * @returns {Promise} Delete result
+ */
+export async function deleteAutoBidTrx(trx, productId, bidderId) {
+  return trx('auto_bidding')
+    .where({ product_id: productId, bidder_id: bidderId })
+    .del();
 }

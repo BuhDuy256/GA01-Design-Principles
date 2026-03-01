@@ -74,3 +74,49 @@ export async function getUniqueBidders(productId) {
     .distinct('users.id', 'users.email', 'users.fullname')
     .select('users.id', 'users.email', 'users.fullname');
 }
+
+// ===================== TRANSACTION SUPPORT =====================
+
+/**
+ * Create a bid record (with transaction support)
+ * @param {Object} trx - Knex transaction object
+ * @param {number} productId - Product ID
+ * @param {number} bidderId - Bidder ID
+ * @param {number} currentPrice - Current price after update
+ * @param {boolean} isBuyNow - Is this a buy now purchase
+ * @returns {Promise} Insert result
+ */
+export async function createBidTrx(trx, productId, bidderId, currentPrice, isBuyNow = false) {
+  return trx('bidding_history').insert({
+    product_id: productId,
+    bidder_id: bidderId,
+    current_price: currentPrice,
+    is_buy_now: isBuyNow
+  });
+}
+
+/**
+ * Get last bidding history record (with transaction support)
+ * @param {Object} trx - Knex transaction object
+ * @param {number} productId - Product ID
+ * @returns {Promise<Object>} Last history record
+ */
+export async function getLastHistoryTrx(trx, productId) {
+  return trx('bidding_history')
+    .where('product_id', productId)
+    .orderBy('created_at', 'desc')
+    .first();
+}
+
+/**
+ * Delete all bidding history for a bidder on a product (with transaction support)
+ * @param {Object} trx - Knex transaction object
+ * @param {number} productId - Product ID
+ * @param {number} bidderId - Bidder ID
+ * @returns {Promise} Delete result
+ */
+export async function deleteBidderHistoryTrx(trx, productId, bidderId) {
+  return trx('bidding_history')
+    .where({ product_id: productId, bidder_id: bidderId })
+    .del();
+}

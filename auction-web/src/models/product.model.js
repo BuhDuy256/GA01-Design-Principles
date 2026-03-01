@@ -27,10 +27,10 @@ export async function findByProductIdForAdmin(productId, userId) {
     .leftJoin('categories', 'products.category_id', 'categories.id')
     // 3. Join lấy thông tin Watchlist (MỚI THÊM)
     // Logic: Join vào bảng watchlist xem user hiện tại có lưu product này không
-    .leftJoin('watchlists', function() {
-        this.on('products.id', '=', 'watchlists.product_id')
-            .andOnVal('watchlists.user_id', '=', userId || -1); 
-            // Nếu userId null (chưa login) thì so sánh với -1 để không khớp
+    .leftJoin('watchlists', function () {
+      this.on('products.id', '=', 'watchlists.product_id')
+        .andOnVal('watchlists.user_id', '=', userId || -1);
+      // Nếu userId null (chưa login) thì so sánh với -1 để không khớp
     })
 
     .where('products.id', productId)
@@ -56,7 +56,7 @@ export async function findByProductIdForAdmin(productId, userId) {
     );
 
   // --- PHẦN XỬ LÝ DỮ LIỆU (QUAN TRỌNG) ---
-  
+
   // Nếu không tìm thấy sản phẩm nào
   if (rows.length === 0) return null;
 
@@ -76,8 +76,8 @@ export function findPage(limit, offset) {
   return db('products')
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
     .select(
-      'products.*', 
-    
+      'products.*',
+
       db.raw(`mask_name_alternating(users.fullname) AS bidder_name`),
       db.raw(`
         (
@@ -96,12 +96,12 @@ export function searchPageByKeywords(keywords, limit, offset, userId, logic = 'o
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // Remove diacritics
     .replace(/đ/g, 'd').replace(/Đ/g, 'D'); // Vietnamese d
-  
+
   let query = db('products')
     .leftJoin('categories', 'products.category_id', 'categories.id')
     .leftJoin('categories as parent_category', 'categories.parent_id', 'parent_category.id')
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
-    .leftJoin('watchlists', function() {
+    .leftJoin('watchlists', function () {
       this.on('products.id', '=', 'watchlists.product_id')
         .andOnVal('watchlists.user_id', '=', userId || -1);
     })
@@ -114,7 +114,7 @@ export function searchPageByKeywords(keywords, limit, offset, userId, logic = 'o
         // AND logic: all keywords must match
         // Split words and each word must exist in product name OR category name OR parent category name
         words.forEach(word => {
-          builder.where(function() {
+          builder.where(function () {
             this.whereRaw(`LOWER(remove_accents(products.name)) LIKE ?`, [`%${word}%`])
               .orWhereRaw(`LOWER(remove_accents(categories.name)) LIKE ?`, [`%${word}%`])
               .orWhereRaw(`LOWER(remove_accents(parent_category.name)) LIKE ?`, [`%${word}%`]);
@@ -123,7 +123,7 @@ export function searchPageByKeywords(keywords, limit, offset, userId, logic = 'o
       } else {
         // OR logic: any keyword can match in product name OR category name OR parent category name
         words.forEach(word => {
-          builder.orWhere(function() {
+          builder.orWhere(function () {
             this.whereRaw(`LOWER(remove_accents(products.name)) LIKE ?`, [`%${word}%`])
               .orWhereRaw(`LOWER(remove_accents(categories.name)) LIKE ?`, [`%${word}%`])
               .orWhereRaw(`LOWER(remove_accents(parent_category.name)) LIKE ?`, [`%${word}%`]);
@@ -169,7 +169,7 @@ export function countByKeywords(keywords, logic = 'or') {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/đ/g, 'd').replace(/Đ/g, 'D');
-  
+
   return db('products')
     .leftJoin('categories', 'products.category_id', 'categories.id')
     .leftJoin('categories as parent_category', 'categories.parent_id', 'parent_category.id')
@@ -181,7 +181,7 @@ export function countByKeywords(keywords, logic = 'or') {
       if (logic === 'and') {
         // AND logic: all keywords must match
         words.forEach(word => {
-          builder.where(function() {
+          builder.where(function () {
             this.whereRaw(`LOWER(remove_accents(products.name)) LIKE ?`, [`%${word}%`])
               .orWhereRaw(`LOWER(remove_accents(categories.name)) LIKE ?`, [`%${word}%`])
               .orWhereRaw(`LOWER(remove_accents(parent_category.name)) LIKE ?`, [`%${word}%`]);
@@ -190,7 +190,7 @@ export function countByKeywords(keywords, logic = 'or') {
       } else {
         // OR logic: any keyword can match in product name OR category name OR parent category name
         words.forEach(word => {
-          builder.orWhere(function() {
+          builder.orWhere(function () {
             this.whereRaw(`LOWER(remove_accents(products.name)) LIKE ?`, [`%${word}%`])
               .orWhereRaw(`LOWER(remove_accents(categories.name)) LIKE ?`, [`%${word}%`])
               .orWhereRaw(`LOWER(remove_accents(parent_category.name)) LIKE ?`, [`%${word}%`]);
@@ -210,13 +210,13 @@ export function findByCategoryId(categoryId, limit, offset, sort, currentUserId)
 
   return db('products')
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
-    
+
     // --- ĐOẠN MỚI THÊM VÀO ---
     // Join bảng watchlists với điều kiện product_id khớp VÀ user_id phải là người đang xem
-    .leftJoin('watchlists', function() {
+    .leftJoin('watchlists', function () {
       this.on('products.id', '=', 'watchlists.product_id')
-        .andOnVal('watchlists.user_id', '=', currentUserId || -1); 
-        // Nếu currentUserId là null/undefined (khách vãng lai), dùng -1 để không khớp với ai cả
+        .andOnVal('watchlists.user_id', '=', currentUserId || -1);
+      // Nếu currentUserId là null/undefined (khách vãng lai), dùng -1 để không khớp với ai cả
     })
     // --------------------------
     // đang active
@@ -230,7 +230,7 @@ export function findByCategoryId(categoryId, limit, offset, sort, currentUserId)
     .whereNull('products.closed_at')
     .select(
       'products.*',
-      
+
       // Logic che tên người đấu giá (giữ nguyên)
       db.raw(`mask_name_alternating(users.fullname) AS bidder_name`),
 
@@ -279,7 +279,7 @@ export function countByCategoryId(categoryId) {
 export function findByCategoryIds(categoryIds, limit, offset, sort, currentUserId) {
   return db('products')
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
-    .leftJoin('watchlists', function() {
+    .leftJoin('watchlists', function () {
       this.on('products.id', '=', 'watchlists.product_id')
         .andOnVal('watchlists.user_id', '=', currentUserId || -1);
     })
@@ -393,29 +393,29 @@ export function findByProductId(productId) {
 }
 
 export function findRelatedProducts(productId) {
-    return db('products')
-      .leftJoin('products as p2', 'products.category_id', 'p2.category_id')
-      .where('products.id', productId)
-      .andWhere('p2.id', '!=', productId)
-      .select('p2.*')
-      .limit(5);
-  } 
+  return db('products')
+    .leftJoin('products as p2', 'products.category_id', 'p2.category_id')
+    .where('products.id', productId)
+    .andWhere('p2.id', '!=', productId)
+    .select('p2.*')
+    .limit(5);
+}
 
 export async function findByProductId2(productId, userId) {
   // Chuyển sang async để xử lý dữ liệu trước khi trả về controller
   const rows = await db('products')
     // 1. Join lấy thông tin người đấu giá cao nhất (Giữ nguyên)
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
-    
+
     // 2. Join lấy danh sách ảnh phụ (Giữ nguyên)
     .leftJoin('product_images', 'products.id', 'product_images.product_id')
 
     // 3. Join lấy thông tin Watchlist (MỚI THÊM)
     // Logic: Join vào bảng watchlist xem user hiện tại có lưu product này không
-    .leftJoin('watchlists', function() {
-        this.on('products.id', '=', 'watchlists.product_id')
-            .andOnVal('watchlists.user_id', '=', userId || -1); 
-            // Nếu userId null (chưa login) thì so sánh với -1 để không khớp
+    .leftJoin('watchlists', function () {
+      this.on('products.id', '=', 'watchlists.product_id')
+        .andOnVal('watchlists.user_id', '=', userId || -1);
+      // Nếu userId null (chưa login) thì so sánh với -1 để không khớp
     })
     .leftJoin('users as seller', 'products.seller_id', 'seller.id')
 
@@ -432,11 +432,11 @@ export async function findByProductId2(productId, userId) {
 
       // Logic che tên người đấu giá (Giữ nguyên)
       db.raw(`mask_name_alternating(users.fullname) AS bidder_name`),
-      
+
       // Thông tin người đấu giá cao nhất (highest bidder)
       'users.fullname as highest_bidder_name',
       'users.email as highest_bidder_email',
-      
+
       // Logic đếm số lượt bid (Giữ nguyên)
       db.raw(`
         (
@@ -452,7 +452,7 @@ export async function findByProductId2(productId, userId) {
     );
 
   // --- PHẦN XỬ LÝ DỮ LIỆU (QUAN TRỌNG) ---
-  
+
   // Nếu không tìm thấy sản phẩm nào
   if (rows.length === 0) return null;
 
@@ -523,7 +523,7 @@ export function countSoldProductsBySellerId(sellerId) {
 export function countPendingProductsBySellerId(sellerId) {
   return db('products')
     .where('seller_id', sellerId)
-    .where(function() {
+    .where(function () {
       this.where('end_at', '<=', new Date())
         .orWhereNotNull('closed_at');
     })
@@ -536,12 +536,12 @@ export function countPendingProductsBySellerId(sellerId) {
 export function countExpiredProductsBySellerId(sellerId) {
   return db('products')
     .where('seller_id', sellerId)
-    .where(function() {
-      this.where(function() {
+    .where(function () {
+      this.where(function () {
         this.where('end_at', '<=', new Date())
-            .whereNull('highest_bidder_id');
+          .whereNull('highest_bidder_id');
       })
-      .orWhere('is_sold', false);
+        .orWhere('is_sold', false);
     })
     .count('id as count')
     .first();
@@ -557,7 +557,7 @@ export async function getSellerStats(sellerId) {
     // Pending Revenue: Sản phẩm hết hạn hoặc closed, có người thắng nhưng chưa thanh toán
     db('products')
       .where('seller_id', sellerId)
-      .where(function() {
+      .where(function () {
         this.where('end_at', '<=', new Date())
           .orWhereNotNull('closed_at');
       })
@@ -620,7 +620,7 @@ export function findActiveProductsBySellerId(sellerId) {
     .where('end_at', '>', new Date())
     .whereNull('closed_at')
     .select(
-      'products.*', 'categories.name as category_name', 
+      'products.*', 'categories.name as category_name',
       db.raw(`
         (
           SELECT COUNT(*) 
@@ -636,15 +636,15 @@ export function findPendingProductsBySellerId(sellerId) {
     .leftJoin('categories', 'products.category_id', 'categories.id')
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
     .where('seller_id', sellerId)
-    .where(function() {
+    .where(function () {
       this.where('end_at', '<=', new Date())
         .orWhereNotNull('closed_at');
     })
     .whereNotNull('highest_bidder_id')
     .whereNull('is_sold')
     .select(
-      'products.*', 
-      'categories.name as category_name', 
+      'products.*',
+      'categories.name as category_name',
       'users.fullname as highest_bidder_name',
       'users.email as highest_bidder_email',
       db.raw(`
@@ -665,7 +665,7 @@ export function findSoldProductsBySellerId(sellerId) {
     .where('end_at', '<=', new Date())
     .where('is_sold', true)
     .select(
-      'products.*', 
+      'products.*',
       'categories.name as category_name',
       'users.fullname as highest_bidder_name',
       'users.email as highest_bidder_email',
@@ -683,12 +683,12 @@ export function findExpiredProductsBySellerId(sellerId) {
   return db('products')
     .leftJoin('categories', 'products.category_id', 'categories.id')
     .where('seller_id', sellerId)
-    .where(function() {
-      this.where(function() {
+    .where(function () {
+      this.where(function () {
         this.where('end_at', '<=', new Date())
-            .whereNull('highest_bidder_id');
+          .whereNull('highest_bidder_id');
       })
-      .orWhere('is_sold', false);
+        .orWhere('is_sold', false);
     })
     .select(
       'products.*',
@@ -730,7 +730,7 @@ export async function getSoldProductsStats(sellerId) {
 export async function getPendingProductsStats(sellerId) {
   const result = await db('products')
     .where('seller_id', sellerId)
-    .where(function() {
+    .where(function () {
       this.where('end_at', '<=', new Date())
         .orWhereNotNull('closed_at');
     })
@@ -761,20 +761,20 @@ export async function cancelProduct(productId, sellerId) {
   const product = await db('products')
     .where('id', productId)
     .first();
-  
+
   if (!product) {
     throw new Error('Product not found');
   }
-  
+
   if (product.seller_id !== sellerId) {
     throw new Error('Unauthorized');
   }
-  
+
   // Cancel any active orders for this product
   const activeOrders = await db('orders')
     .where('product_id', productId)
     .whereNotIn('status', ['completed', 'cancelled']);
-  
+
   // Cancel all active orders
   for (let order of activeOrders) {
     await db('orders')
@@ -786,13 +786,13 @@ export async function cancelProduct(productId, sellerId) {
         cancelled_at: new Date()
       });
   }
-  
+
   // Update product - mark as cancelled
   await updateProduct(productId, {
     is_sold: false,
     closed_at: new Date()
   });
-  
+
   // Return product data for route to use
   return product;
 }
@@ -836,10 +836,38 @@ export async function markEndNotificationSent(productId) {
 }
 
 export const markProductAsSold = async (productId) => {
-    return db('products')
-        .where('id', productId)
-        .update({ 
-            is_sold: true,
-            closed_at: new Date()
-        });
+  return db('products')
+    .where('id', productId)
+    .update({
+      is_sold: true,
+      closed_at: new Date()
+    });
 };
+
+// ===================== TRANSACTION SUPPORT =====================
+
+/**
+ * Find product by ID with row-level lock (with transaction support)
+ * @param {Object} trx - Knex transaction object
+ * @param {number} productId - Product ID
+ * @returns {Promise<Object>} Product record
+ */
+export async function findByIdWithLockTrx(trx, productId) {
+  return trx('products')
+    .where('id', productId)
+    .forUpdate()
+    .first();
+}
+
+/**
+ * Update product fields (with transaction support)
+ * @param {Object} trx - Knex transaction object
+ * @param {number} productId - Product ID
+ * @param {Object} updateData - Fields to update
+ * @returns {Promise} Update result
+ */
+export async function updateProductTrx(trx, productId, updateData) {
+  return trx('products')
+    .where('id', productId)
+    .update(updateData);
+}

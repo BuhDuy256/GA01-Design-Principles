@@ -6,6 +6,11 @@
 import db from '../utils/db.js';
 import * as reviewModel from '../models/review.model.js';
 import * as systemSettingModel from '../models/systemSetting.model.js';
+import * as productModel from '../models/product.model.js';
+import * as rejectedBidderModel from '../models/rejectedBidder.model.js';
+import * as autoBiddingModel from '../models/autoBidding.model.js';
+import * as biddingHistoryModel from '../models/biddingHistory.model.js';
+import * as userModel from '../models/user.model.js';
 import { sendBidNotifications } from './email.service.js';
 import { isProductActive } from './product.service.js';
 
@@ -24,10 +29,7 @@ async function validateBidPermissions(product, userId, trx) {
   }
 
   // Check if bidder has been rejected
-  const isRejected = await trx('rejected_bidders')
-    .where('product_id', product.id)
-    .where('bidder_id', userId)
-    .first();
+  const isRejected = await rejectedBidderModel.isRejectedTrx(trx, product.id, userId);
 
   if (isRejected) {
     throw new Error('You have been rejected from bidding on this product by the seller');
@@ -195,26 +197,15 @@ async function persistBidResult(trx, productId, bidResult, extendedEndTime, user
     updateData.end_at = extendedEndTime;
   }
 
-  await trx('products').where('id', productId).update(updateData);
+  await productModel.updateProductTrx(trx, productId, updateData);
 
   // Add bidding history (only if price changed)
   if (shouldCreateHistory) {
-    await trx('bidding_history').insert({
-      product_id: productId,
-      bidder_id: newHighestBidderId,
-      current_price: newCurrentPrice
-    });
+    await biddingHistoryModel.createBidTrx(trx, productId, newHighestBidderId, newCurrentPrice);
   }
 
   // Update auto_bidding table (upsert)
-  await trx.raw(`
-    INSERT INTO auto_bidding (product_id, bidder_id, max_price)
-    VALUES (?, ?, ?)
-    ON CONFLICT (product_id, bidder_id)
-    DO UPDATE SET 
-      max_price = EXCLUDED.max_price,
-      created_at = NOW()
-  `, [productId, userId, bidAmount]);
+  await autoBiddingModel.upsertAutoBidTrx(trx, productId, userId, bidAmount);
 }
 
 /**
@@ -233,10 +224,7 @@ export async function placeBid({ userId, productId, bidAmount, productUrl }) {
   // Use transaction with row-level locking to prevent race conditions
   const result = await db.transaction(async (trx) => {
     // 1. Lock product and load data
-    const product = await trx('products')
-      .where('id', productId)
-      .forUpdate()
-      .first();
+    const product = await productModel.findByIdWithLockTrx(trx, productId);
 
     if (!product) {
       throw new Error('Product not found');
@@ -302,10 +290,7 @@ export async function placeBid({ userId, productId, bidAmount, productUrl }) {
  * Validate bidder can be rejected (KISS: Single responsibility)
  */
 async function validateBidderRejection(trx, productId, bidderId) {
-  const autoBid = await trx('auto_bidding')
-    .where('product_id', productId)
-    .where('bidder_id', bidderId)
-    .first();
+  const autoBid = await autoBiddingModel.getAutoBidTrx(trx, productId, bidderId);
 
   if (!autoBid) {
     throw new Error('This bidder has not placed a bid on this product');
@@ -317,8 +302,8 @@ async function validateBidderRejection(trx, productId, bidderId) {
  */
 async function gatherRejectionInfo(trx, product, bidderId, sellerId) {
   const [rejectedBidderInfo, sellerInfo] = await Promise.all([
-    trx('users').where('id', bidderId).select('id', 'email', 'fullname').first(),
-    trx('users').where('id', sellerId).select('id', 'fullname').first()
+    userModel.findByIdTrx(trx, bidderId, ['id', 'email', 'fullname']),
+    userModel.findByIdTrx(trx, sellerId, ['id', 'fullname'])
   ]);
 
   const productInfo = {
@@ -340,23 +325,13 @@ async function gatherRejectionInfo(trx, product, bidderId, sellerId) {
 async function removeBidderFromProduct(trx, productId, bidderId, sellerId) {
   await Promise.all([
     // Add to rejected_bidders table
-    trx('rejected_bidders').insert({
-      product_id: productId,
-      bidder_id: bidderId,
-      seller_id: sellerId
-    }).onConflict(['product_id', 'bidder_id']).ignore(),
+    rejectedBidderModel.rejectBidderTrx(trx, productId, bidderId, sellerId),
 
     // Remove bidding history
-    trx('bidding_history')
-      .where('product_id', productId)
-      .where('bidder_id', bidderId)
-      .del(),
+    biddingHistoryModel.deleteBidderHistoryTrx(trx, productId, bidderId),
 
     // Remove from auto_bidding
-    trx('auto_bidding')
-      .where('product_id', productId)
-      .where('bidder_id', bidderId)
-      .del()
+    autoBiddingModel.deleteAutoBidTrx(trx, productId, bidderId)
   ]);
 }
 
@@ -364,33 +339,25 @@ async function removeBidderFromProduct(trx, productId, bidderId, sellerId) {
  * Reset product to starting state (no bidders) (KISS: Single responsibility)
  */
 async function resetProductToStartingState(trx, productId, startingPrice) {
-  await trx('products')
-    .where('id', productId)
-    .update({
-      highest_bidder_id: null,
-      current_price: startingPrice,
-      highest_max_price: null
-    });
+  await productModel.updateProductTrx(trx, productId, {
+    highest_bidder_id: null,
+    current_price: startingPrice,
+    highest_max_price: null
+  });
 }
 
 /**
  * Set single winner at starting price (KISS: Single responsibility)
  */
 async function setWinnerAtStartingPrice(trx, productId, winner, startingPrice, shouldAddHistory) {
-  await trx('products')
-    .where('id', productId)
-    .update({
-      highest_bidder_id: winner.bidder_id,
-      current_price: startingPrice,
-      highest_max_price: winner.max_price
-    });
+  await productModel.updateProductTrx(trx, productId, {
+    highest_bidder_id: winner.bidder_id,
+    current_price: startingPrice,
+    highest_max_price: winner.max_price
+  });
 
   if (shouldAddHistory) {
-    await trx('bidding_history').insert({
-      product_id: productId,
-      bidder_id: winner.bidder_id,
-      current_price: startingPrice
-    });
+    await biddingHistoryModel.createBidTrx(trx, productId, winner.bidder_id, startingPrice);
   }
 }
 
@@ -406,26 +373,17 @@ async function recalculateCompetitiveBidding(trx, productId, product, firstBidde
     newPrice = firstBidder.max_price;
   }
 
-  await trx('products')
-    .where('id', productId)
-    .update({
-      highest_bidder_id: firstBidder.bidder_id,
-      current_price: newPrice,
-      highest_max_price: firstBidder.max_price
-    });
+  await productModel.updateProductTrx(trx, productId, {
+    highest_bidder_id: firstBidder.bidder_id,
+    current_price: newPrice,
+    highest_max_price: firstBidder.max_price
+  });
 
   // Add history entry only if price changed
-  const lastHistory = await trx('bidding_history')
-    .where('product_id', productId)
-    .orderBy('created_at', 'desc')
-    .first();
+  const lastHistory = await biddingHistoryModel.getLastHistoryTrx(trx, productId);
 
   if (!lastHistory || lastHistory.current_price !== newPrice) {
-    await trx('bidding_history').insert({
-      product_id: productId,
-      bidder_id: firstBidder.bidder_id,
-      current_price: newPrice
-    });
+    await biddingHistoryModel.createBidTrx(trx, productId, firstBidder.bidder_id, newPrice);
   }
 }
 
@@ -433,9 +391,7 @@ async function recalculateCompetitiveBidding(trx, productId, product, firstBidde
  * Recalculate auction state after bidder removal (KISS: Orchestrates sub-functions)
  */
 async function recalculateAuctionState(trx, productId, product, bidderId) {
-  const allAutoBids = await trx('auto_bidding')
-    .where('product_id', productId)
-    .orderBy('max_price', 'desc');
+  const allAutoBids = await autoBiddingModel.getAllAutoBidsTrx(trx, productId);
 
   const bidderIdNum = parseInt(bidderId);
   const highestBidderIdNum = parseInt(product.highest_bidder_id);
@@ -471,10 +427,7 @@ async function recalculateAuctionState(trx, productId, product, bidderId) {
 export async function rejectBidder({ productId, bidderId, sellerId }) {
   const result = await db.transaction(async (trx) => {
     // 1. Lock and verify product ownership
-    const product = await trx('products')
-      .where('id', productId)
-      .forUpdate()
-      .first();
+    const product = await productModel.findByIdWithLockTrx(trx, productId);
 
     if (!product) {
       throw new Error('Product not found');
@@ -534,9 +487,7 @@ async function validateBuyNowPermissions(product, userId, trx) {
     throw new Error('You cannot buy your own product');
   }
 
-  const isRejected = await trx('rejected_bidders')
-    .where({ product_id: product.id, bidder_id: userId })
-    .first();
+  const isRejected = await rejectedBidderModel.isRejectedTrx(trx, product.id, userId);
 
   if (isRejected) {
     throw new Error('You have been rejected from bidding on this product');
@@ -563,23 +514,16 @@ async function validateBuyNowBidderRating(product, userId) {
 async function closeBuyNowAuction(trx, productId, userId, buyNowPrice) {
   const now = new Date();
 
-  await trx('products')
-    .where('id', productId)
-    .update({
-      current_price: buyNowPrice,
-      highest_bidder_id: userId,
-      highest_max_price: buyNowPrice,
-      end_at: now,
-      closed_at: now,
-      is_buy_now_purchase: true
-    });
-
-  await trx('bidding_history').insert({
-    product_id: productId,
-    bidder_id: userId,
+  await productModel.updateProductTrx(trx, productId, {
     current_price: buyNowPrice,
-    is_buy_now: true
+    highest_bidder_id: userId,
+    highest_max_price: buyNowPrice,
+    end_at: now,
+    closed_at: now,
+    is_buy_now_purchase: true
   });
+
+  await biddingHistoryModel.createBidTrx(trx, productId, userId, buyNowPrice, true);
 }
 
 /**
@@ -597,10 +541,7 @@ async function closeBuyNowAuction(trx, productId, userId, buyNowPrice) {
 export async function buyNowPurchase({ userId, productId, dbTransaction = db.transaction.bind(db) }) {
   const result = await dbTransaction(async (trx) => {
     // 1. Lock and load product
-    const product = await trx('products')
-      .where('id', productId)
-      .forUpdate()
-      .first();
+    const product = await productModel.findByIdWithLockTrx(trx, productId);
 
     if (!product) {
       throw new Error('Product not found');

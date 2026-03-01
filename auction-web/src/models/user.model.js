@@ -30,9 +30,9 @@ export async function update(id, user) {
   const rows = await db('users')
     .where('id', id)
     .update(user)
-    .returning('*'); 
-  
-  return rows[0]; 
+    .returning('*');
+
+  return rows[0];
 }
 
 export function findByEmail(email) {
@@ -83,9 +83,25 @@ export function addOAuthProvider(user_id, provider, oauth_id) {
       oauth_id: oauth_id,
       email_verified: true
     });
-} 
+}
 export async function deleteUser(id) {
-  return db('users')  
+  return db('users')
     .where('id', id)
     .del();
+}
+
+// ===================== TRANSACTION SUPPORT =====================
+
+/**
+ * Find user by ID with specific fields (with transaction support)
+ * @param {Object} trx - Knex transaction object
+ * @param {number} userId - User ID
+ * @param {Array<string>} selectFields - Fields to select (default: all)
+ * @returns {Promise<Object>} User record
+ */
+export async function findByIdTrx(trx, userId, selectFields = ['id', 'email', 'fullname']) {
+  return trx('users')
+    .where('id', userId)
+    .select(selectFields)
+    .first();
 }

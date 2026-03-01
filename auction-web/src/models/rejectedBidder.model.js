@@ -11,7 +11,7 @@ export async function isRejected(productId, bidderId) {
     .where('product_id', productId)
     .where('bidder_id', bidderId)
     .first();
-  
+
   return !!result;
 }
 
@@ -61,4 +61,39 @@ export async function unrejectBidder(productId, bidderId) {
     .where('product_id', productId)
     .where('bidder_id', bidderId)
     .del();
+}
+
+// ===================== TRANSACTION SUPPORT =====================
+
+/**
+ * Check if a bidder is rejected (with transaction support)
+ * @param {Object} trx - Knex transaction object
+ * @param {number} productId - Product ID
+ * @param {number} bidderId - Bidder ID
+ * @returns {Promise<boolean>} True if bidder is rejected
+ */
+export async function isRejectedTrx(trx, productId, bidderId) {
+  const result = await trx('rejected_bidders')
+    .where({ product_id: productId, bidder_id: bidderId })
+    .first();
+  return !!result;
+}
+
+/**
+ * Add a bidder to rejected list with upsert (with transaction support)
+ * @param {Object} trx - Knex transaction object
+ * @param {number} productId - Product ID
+ * @param {number} bidderId - Bidder ID
+ * @param {number} sellerId - Seller ID
+ * @returns {Promise} Insert result
+ */
+export async function rejectBidderTrx(trx, productId, bidderId, sellerId) {
+  return trx('rejected_bidders')
+    .insert({
+      product_id: productId,
+      bidder_id: bidderId,
+      seller_id: sellerId
+    })
+    .onConflict(['product_id', 'bidder_id'])
+    .ignore();
 }
