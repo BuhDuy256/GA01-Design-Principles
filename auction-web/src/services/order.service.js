@@ -100,7 +100,47 @@ export const sendMessage = async (orderId, userId, message) => {
           sender_id: userId,
           message
         });
-}
+};
+
+export const confirmPayment = async (orderId, userId) => {
+    // Verify payment invoice exists
+    const paymentInvoice = await invoiceModel.getPaymentInvoice(orderId);
+    
+    if (!paymentInvoice) {
+        const error = new Error('No payment invoice found');
+        error.code = 'NO_PAYMENT_INVOICE';
+        throw error;
+    }
+    
+    // Verify and update status
+    await invoiceModel.verifyInvoice(paymentInvoice.id);
+    await orderModel.updateStatus(orderId, 'payment_confirmed', userId);
+};
+
+export const processShippingSubmission = async (orderId, userId, shippingData) => {
+    const { tracking_number, shipping_provider, shipping_proof_urls, note } = shippingData;
+    
+    // Create shipping invoice
+    await invoiceModel.createShippingInvoice({
+        order_id: orderId,
+        issuer_id: userId,
+        tracking_number,
+        shipping_provider,
+        shipping_proof_urls,
+        note
+    });
+    
+    // Update order status
+    await orderModel.updateStatus(orderId, 'shipped', userId);
+};
+
+export const confirmDelivery = async (orderId, userId) => {
+    await orderModel.updateStatus(orderId, 'delivered', userId);
+};
+
+export const getOrderMessages = async (orderId) => {
+    return await orderChatModel.getMessagesByOrderId(orderId);
+};
 
 
 export const getProductStatus = (product) => {

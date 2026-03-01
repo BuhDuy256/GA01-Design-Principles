@@ -367,3 +367,88 @@ export async function unrejectBidder({ productId, bidderId, sellerId }) {
   // Remove from rejected_bidders table
   await rejectedBidderModel.unrejectBidder(productId, bidderId);
 }
+
+
+// Seller dashboard and product listing
+export async function getSellerStats(sellerId) {
+    return await productModel.getSellerStats(sellerId);
+}
+
+export async function findAllProductsBySellerId(sellerId) {
+    return await productModel.findAllProductsBySellerId(sellerId);
+}
+
+export async function findActiveProductsBySellerId(sellerId) {
+    return await productModel.findActiveProductsBySellerId(sellerId);
+}
+
+export async function findPendingProductsBySellerId(sellerId) {
+    return await productModel.findPendingProductsBySellerId(sellerId);
+}
+
+export async function getPendingProductsStats(sellerId) {
+    return await productModel.getPendingProductsStats(sellerId);
+}
+
+export async function findSoldProductsBySellerId(sellerId) {
+    return await productModel.findSoldProductsBySellerId(sellerId);
+}
+
+export async function getSoldProductsStats(sellerId) {
+    return await productModel.getSoldProductsStats(sellerId);
+}
+
+export async function findExpiredProductsBySellerId(sellerId) {
+    return await productModel.findExpiredProductsBySellerId(sellerId);
+}
+
+// Product cancellation
+export async function cancelProduct(productId, sellerId) {
+    return await productModel.cancelProduct(productId, sellerId);
+}
+
+// Verify product ownership helper
+async function verifyProductOwnership(productId, sellerId) {
+    const product = await productModel.findByProductId2(productId, null);
+    if (!product) {
+        const error = new Error('Product not found');
+        error.code = 'PRODUCT_NOT_FOUND';
+        throw error;
+    }
+    if (product.seller_id !== sellerId) {
+        const error = new Error('Unauthorized');
+        error.code = 'UNAUTHORIZED';
+        throw error;
+    }
+    return product;
+}
+
+// Description updates management
+export async function getDescriptionUpdates(productId, sellerId) {
+    await verifyProductOwnership(productId, sellerId);
+    return await productDescUpdateModel.findByProductId(productId);
+}
+
+export async function updateDescriptionUpdate(updateId, sellerId, content) {
+    const update = await productDescUpdateModel.findById(updateId);
+    if (!update) {
+        const error = new Error('Update not found');
+        error.code = 'UPDATE_NOT_FOUND';
+        throw error;
+    }
+    
+    await verifyProductOwnership(update.product_id, sellerId);
+    await productDescUpdateModel.updateContent(updateId, content);
+}
+
+export async function deleteDescriptionUpdate(updateId, sellerId) {
+    const update = await productDescUpdateModel.findById(updateId);
+    if (!update) {
+        const error = new Error('Update not found');
+        error.code = 'UPDATE_NOT_FOUND';
+        throw error;
+    }
+    
+    await verifyProductOwnership(update.product_id, sellerId);
+    await productDescUpdateModel.deleteUpdate(updateId);
+}

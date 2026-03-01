@@ -1,8 +1,5 @@
 import express from 'express';
 import { isAuthenticated } from '../middlewares/auth.mdw.js';
-import * as orderModel from '../models/order.model.js';
-import * as invoiceModel from '../models/invoice.model.js';
-import * as orderChatModel from '../models/orderChat.model.js';
 import {upload} from '../utils/upload.js'
 import {requireOrderAccess} from '../middlewares/orderAccess.mdw.js'
 import * as orderService from '../services/order.service.js';
@@ -50,17 +47,13 @@ router.post('/:orderId/confirm-payment', isAuthenticated, requireOrderAccess('se
     const orderId = req.params.orderId;
     const userId = req.session.authUser.id;
     
-    // Verify payment invoice
-    const paymentInvoice = await invoiceModel.getPaymentInvoice(orderId);
-    if (!paymentInvoice) {
-      return res.status(400).json({ error: 'No payment invoice found' });
-    }
-    
-    await invoiceModel.verifyInvoice(paymentInvoice.id);
-    await orderModel.updateStatus(orderId, 'payment_confirmed', userId);
+    await orderService.confirmPayment(orderId, userId);
     
     res.json({ success: true, message: 'Payment confirmed successfully' });
   } catch (error) {
+    if (error.code === 'NO_PAYMENT_INVOICE') {
+      return res.status(400).json({ error: 'No payment invoice found' });
+    }
     console.error('Confirm payment error:', error);
     res.status(500).json({ error: error.message || 'Failed to confirm payment' });
   }
@@ -71,20 +64,9 @@ router.post('/:orderId/submit-shipping', isAuthenticated, requireOrderAccess('se
   try {
     const orderId = req.params.orderId;
     const userId = req.session.authUser.id;
-    const { tracking_number, shipping_provider, shipping_proof_urls, note } = req.body;
+    const shippingData = req.body;
     
-    
-    // Create shipping invoice
-    await invoiceModel.createShippingInvoice({
-      order_id: orderId,
-      issuer_id: userId,
-      tracking_number,
-      shipping_provider,
-      shipping_proof_urls,
-      note
-    });
-    
-    await orderModel.updateStatus(orderId, 'shipped', userId);
+    await orderService.processShippingSubmission(orderId, userId, shippingData);
     
     res.json({ success: true, message: 'Shipping info submitted successfully' });
   } catch (error) {
@@ -99,8 +81,7 @@ router.post('/:orderId/confirm-delivery', isAuthenticated, requireOrderAccess('b
     const orderId = req.params.orderId;
     const userId = req.session.authUser.id;
     
-    
-    await orderModel.updateStatus(orderId, 'delivered', userId);
+    await orderService.confirmDelivery(orderId, userId);
     
     res.json({ success: true, message: 'Delivery confirmed successfully' });
   } catch (error) {
@@ -168,7 +149,7 @@ router.get('/:orderId/messages', isAuthenticated, requireOrderAccess(), async (r
     const userId = req.session.authUser.id;
     
     // Take raw messages from DB
-    const rawMessages = await orderChatModel.getMessagesByOrderId(orderId);
+    const rawMessages = await orderService.getOrderMessages(orderId);
     
     // Transform raw messages to view data (format date, determine sent/received)
     const viewData = rawMessages.map(msg => ({
