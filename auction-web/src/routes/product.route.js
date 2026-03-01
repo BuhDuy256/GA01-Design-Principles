@@ -15,6 +15,7 @@ import { isAuthenticated } from '../middlewares/auth.mdw.js';
 import { sendMail } from '../utils/mailer.js';
 import db from '../utils/db.js';
 import { parsePostgresArray } from '../utils/dbHelpers.js';
+import { paginate } from '../utils/pagination.js';
 import * as orderService from '../services/order.service.js';
 const router = express.Router();
 
@@ -41,9 +42,8 @@ router.get('/category', async (req, res) => {
   const userId = req.session.authUser ? req.session.authUser.id : null;
   const sort = req.query.sort || '';
   const categoryId = req.query.catid;
-  const page = parseInt(req.query.page) || 1;
   const limit = 3;
-  const offset = (page - 1) * limit;
+  const offset = ((parseInt(req.query.page) || 1) - 1) * limit;
 
   // Check if category is level 1 (parent_id is null)
   const category = await categoryModel.findByCategoryId(categoryId);
@@ -61,19 +61,12 @@ router.get('/category', async (req, res) => {
   const products = await prepareProductList(list);
   const total = await productModel.countByCategoryIds(categoryIds);
   console.log('Total products in category:', total.count);
-  const totalCount = parseInt(total.count) || 0;
-  const nPages = Math.ceil(totalCount / limit);
-  let from = (page - 1) * limit + 1;
-  let to = page * limit;
-  if (to > totalCount) to = totalCount;
-  if (totalCount === 0) { from = 0; to = 0; }
+
+  const paginationData = paginate(req.query.page, total.count, limit);
+
   res.render('vwProduct/list', {
     products: products,
-    totalCount,
-    from,
-    to,
-    currentPage: page,
-    totalPages: nPages,
+    ...paginationData,
     categoryId: categoryId,
     categoryName: category ? category.name : null,
     sort: sort,
@@ -88,22 +81,18 @@ router.get('/search', async (req, res) => {
 
   // If keyword is empty, return empty results
   if (q.length === 0) {
+    const emptyPaginationData = paginate(1, 0, 3);
     return res.render('vwProduct/list', {
       q: q,
       logic: logic,
       sort: sort,
       products: [],
-      totalCount: 0,
-      from: 0,
-      to: 0,
-      currentPage: 1,
-      totalPages: 0,
+      ...emptyPaginationData,
     });
   }
 
   const limit = 3;
-  const page = parseInt(req.query.page) || 1;
-  const offset = (page - 1) * limit;
+  const offset = ((parseInt(req.query.page) || 1) - 1) * limit;
 
   // Pass keywords directly without modification
   // plainto_tsquery will handle tokenization automatically
@@ -113,21 +102,12 @@ router.get('/search', async (req, res) => {
   const list = await productModel.searchPageByKeywords(keywords, limit, offset, userId, logic, sort);
   const products = await prepareProductList(list);
   const total = await productModel.countByKeywords(keywords, logic);
-  const totalCount = parseInt(total.count) || 0;
 
-  const nPages = Math.ceil(totalCount / limit);
-  let from = (page - 1) * limit + 1;
-  let to = page * limit;
-  if (to > totalCount) to = totalCount;
-  if (totalCount === 0) { from = 0; to = 0; }
+  const paginationData = paginate(req.query.page, total.count, limit);
 
   res.render('vwProduct/list', {
     products: products,
-    totalCount,
-    from,
-    to,
-    currentPage: page,
-    totalPages: nPages,
+    ...paginationData,
     q: q,
     logic: logic,
     sort: sort,
