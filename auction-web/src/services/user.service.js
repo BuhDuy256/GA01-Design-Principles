@@ -41,7 +41,7 @@ export const UserService = {
       address: address || currentUser.address,
       date_of_birth: date_of_birth ? new Date(date_of_birth) : currentUser.date_of_birth,
     };
-    
+
     // Chỉ cập nhật password cho non-OAuth users
     if (!currentUser.oauth_provider) {
       entity.password_hash = new_password
@@ -51,11 +51,41 @@ export const UserService = {
 
     // 5. GỌI MODEL UPDATE
     const updatedUser = await userModel.update(userId, entity);
-    
+
     if (updatedUser) {
       delete updatedUser.password_hash;
     }
 
     return { updatedUser };
+  },
+
+  /**
+   * Get user by ID
+   * @param {number} userId - User ID
+   * @returns {Promise<Object>} User object
+   */
+  async getUserById(userId) {
+    const user = await userModel.findById(userId);
+    return user;
+  },
+
+  /**
+   * Get user with masked name for bidder display
+   * @param {number} userId - User ID
+   * @returns {Promise<Object>} User object with masked name
+   */
+  async getUserWithMaskedName(userId) {
+    const user = await userModel.findById(userId);
+    if (!user) return null;
+
+    // Mask bidder name
+    const maskedName = user.fullname ? user.fullname.split('').map((char, index) =>
+      index % 2 === 0 ? char : '*'
+    ).join('') : '';
+
+    return {
+      ...user,
+      maskedName
+    };
   }
 };

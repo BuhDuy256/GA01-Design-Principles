@@ -1,76 +1,40 @@
 import express from 'express';
-import * as productModel from '../models/product.model.js';
-import * as userModel from '../models/user.model.js';
-import * as watchListModel from '../models/watchlist.model.js';
-import * as biddingHistoryModel from '../models/biddingHistory.model.js';
-import * as productCommentModel from '../models/productComment.model.js';
-import * as categoryModel from '../models/category.model.js';
-import * as productDescUpdateModel from '../models/productDescriptionUpdate.model.js';
-import * as systemSettingModel from '../models/systemSetting.model.js';
-import * as rejectedBidderModel from '../models/rejectedBidder.model.js';
-import * as invoiceModel from '../models/invoice.model.js';
-import * as orderChatModel from '../models/orderChat.model.js';
 import { isAuthenticated } from '../middlewares/auth.mdw.js';
-import { sendMail } from '../utils/mailer.js';
-import { parsePostgresArray } from '../utils/dbHelpers.js';
 import { paginate } from '../utils/pagination.js';
-import { ensureProductExists, ensureSellerOwnership, ensureCanViewProduct, ensureProductIsActive, ensureNotSeller } from '../utils/productAuthorization.js';
+import { ensureProductExists, ensureCanViewProduct } from '../utils/productAuthorization.js';
 import * as orderService from '../services/order.service.js';
-import { getUserRatingSummary } from '../services/rating.service.js';
-import { sendBidNotifications, sendSellerCommentNotification, sendSellerAnswerNotification, sendRejectionNotification } from '../services/email.service.js';
+import * as productService from '../services/product.service.js';
+import * as watchlistService from '../services/watchlist.service.js';
+import * as commentService from '../services/comment.service.js';
 import * as bidService from '../services/bid.service.js';
+import { UserService } from '../services/user.service.js';
+import { getUserRatingSummary } from '../services/rating.service.js';
+import { sendRejectionNotification } from '../services/email.service.js';
 const router = express.Router();
-
-const prepareProductList = async (products) => {
-  const now = new Date();
-  if (!products) return [];
-
-  // Load settings from database every time to get latest value
-  const settings = await systemSettingModel.getSettings();
-  const N_MINUTES = settings.new_product_limit_minutes;
-
-  return products.map(product => {
-    const created = new Date(product.created_at);
-    const isNew = (now - created) < (N_MINUTES * 60 * 1000);
-
-    return {
-      ...product,
-      is_new: isNew
-    };
-  });
-};
 
 router.get('/category', async (req, res) => {
   const userId = req.session.authUser ? req.session.authUser.id : null;
   const sort = req.query.sort || '';
   const categoryId = req.query.catid;
   const limit = 3;
-  const offset = ((parseInt(req.query.page) || 1) - 1) * limit;
+  const page = parseInt(req.query.page) || 1;
 
-  // Check if category is level 1 (parent_id is null)
-  const category = await categoryModel.findByCategoryId(categoryId);
+  // Call service layer
+  const result = await productService.getProductsByCategory({
+    categoryId,
+    page,
+    sort,
+    userId,
+    limit
+  });
 
-  let categoryIds = [categoryId];
-
-  // If it's a level 1 category, include all child categories
-  if (category && category.parent_id === null) {
-    const childCategories = await categoryModel.findChildCategoryIds(categoryId);
-    const childIds = childCategories.map(cat => cat.id);
-    categoryIds = [categoryId, ...childIds];
-  }
-
-  const list = await productModel.findByCategoryIds(categoryIds, limit, offset, sort, userId);
-  const products = await prepareProductList(list);
-  const total = await productModel.countByCategoryIds(categoryIds);
-  console.log('Total products in category:', total.count);
-
-  const paginationData = paginate(req.query.page, total.count, limit);
+  const paginationData = paginate(page, result.total, limit);
 
   res.render('vwProduct/list', {
-    products: products,
+    products: result.products,
     ...paginationData,
     categoryId: categoryId,
-    categoryName: category ? category.name : null,
+    categoryName: result.category ? result.category.name : null,
     sort: sort,
   });
 });
@@ -80,35 +44,23 @@ router.get('/search', async (req, res) => {
   const q = req.query.q || '';
   const logic = req.query.logic || 'and'; // 'and' or 'or'
   const sort = req.query.sort || '';
-
-  // If keyword is empty, return empty results
-  if (q.length === 0) {
-    const emptyPaginationData = paginate(1, 0, 3);
-    return res.render('vwProduct/list', {
-      q: q,
-      logic: logic,
-      sort: sort,
-      products: [],
-      ...emptyPaginationData,
-    });
-  }
-
   const limit = 3;
-  const offset = ((parseInt(req.query.page) || 1) - 1) * limit;
+  const page = parseInt(req.query.page) || 1;
 
-  // Pass keywords directly without modification
-  // plainto_tsquery will handle tokenization automatically
-  const keywords = q.trim();
+  // Call service layer
+  const result = await productService.searchProducts({
+    keywords: q,
+    page,
+    logic,
+    sort,
+    userId,
+    limit
+  });
 
-  // Search in both product name and category
-  const list = await productModel.searchPageByKeywords(keywords, limit, offset, userId, logic, sort);
-  const products = await prepareProductList(list);
-  const total = await productModel.countByKeywords(keywords, logic);
-
-  const paginationData = paginate(req.query.page, total.count, limit);
+  const paginationData = paginate(page, result.total, limit);
 
   res.render('vwProduct/list', {
-    products: products,
+    products: result.products,
     ...paginationData,
     q: q,
     logic: logic,
@@ -117,132 +69,78 @@ router.get('/search', async (req, res) => {
 });
 
 router.get('/detail', async (req, res) => {
-  const userId = req.session.authUser ? req.session.authUser.id : null;
-  const productId = req.query.id;
-  const product = await productModel.findByProductId2(productId, userId);
+  try {
+    const userId = req.session.authUser ? req.session.authUser.id : null;
+    const productId = req.query.id;
+    const commentPage = parseInt(req.query.commentPage) || 1;
+    const commentsPerPage = 2;
 
-  // Check if product exists
-  const productError = ensureProductExists(product, { throwError: false });
-  if (productError) {
-    return res.status(productError.status).render('404', { message: productError.message });
-  }
-  console.log('Product details:', product);
+    // Call service layer to get all product details
+    const detailData = await productService.getProductDetail({
+      productId,
+      userId,
+      commentPage,
+      commentsPerPage
+    });
 
-  const related_products = await productModel.findRelatedProducts(productId);
-  // Determine product status
-  const now = new Date();
-  const endDate = new Date(product.end_at);
-  let productStatus = 'ACTIVE';
-
-  // Auto-close auction if time expired and not yet closed
-  if (endDate <= now && !product.closed_at && product.is_sold === null) {
-    // Update closed_at to mark auction end time
-    await productModel.updateProduct(productId, { closed_at: endDate });
-    product.closed_at = endDate; // Update local object
-  }
-
-  if (product.is_sold === true) {
-    productStatus = 'SOLD';
-  } else if (product.is_sold === false) {
-    productStatus = 'CANCELLED';
-  } else if ((endDate <= now || product.closed_at) && product.highest_bidder_id) {
-    productStatus = 'PENDING';
-  } else if (endDate <= now && !product.highest_bidder_id) {
-    productStatus = 'EXPIRED';
-  } else if (endDate > now && !product.closed_at) {
-    productStatus = 'ACTIVE';
-  }
-
-  // Authorization check: Non-ACTIVE products can only be viewed by seller or highest bidder
-  const authError = ensureCanViewProduct(product, userId, productStatus);
-  if (authError) {
-    return res.status(authError.status).render('403', { message: authError.message });
-  }
-
-  // Pagination for comments
-  const commentPage = parseInt(req.query.commentPage) || 1;
-  const commentsPerPage = 2; // 2 comments per page
-  const offset = (commentPage - 1) * commentsPerPage;
-
-  // Load description updates, bidding history, and comments in parallel
-  const [descriptionUpdates, biddingHistory, comments, totalComments] = await Promise.all([
-    productDescUpdateModel.findByProductId(productId),
-    biddingHistoryModel.getBiddingHistory(productId),
-    productCommentModel.getCommentsByProductId(productId, commentsPerPage, offset),
-    productCommentModel.countCommentsByProductId(productId)
-  ]);
-
-  // Load rejected bidders (only for seller)
-  let rejectedBidders = [];
-  if (req.session.authUser && product.seller_id === req.session.authUser.id) {
-    rejectedBidders = await rejectedBidderModel.getRejectedBidders(productId);
-  }
-
-  // Load replies for all comments in one batch to avoid N+1 query problem
-  if (comments.length > 0) {
-    const commentIds = comments.map(c => c.id);
-    const allReplies = await productCommentModel.getRepliesByCommentIds(commentIds);
-
-    // Group replies by parent comment id
-    const repliesMap = new Map();
-    for (const reply of allReplies) {
-      if (!repliesMap.has(reply.parent_id)) {
-        repliesMap.set(reply.parent_id, []);
-      }
-      repliesMap.get(reply.parent_id).push(reply);
+    // Check product exists (service throws error if not found)
+    const productError = ensureProductExists(detailData.product, { throwError: false });
+    if (productError) {
+      return res.status(productError.status).render('404', { message: productError.message });
     }
 
-    // Attach replies to their parent comments
-    for (const comment of comments) {
-      comment.replies = repliesMap.get(comment.id) || [];
+    // Authorization check: Non-ACTIVE products can only be viewed by seller or highest bidder
+    const authError = ensureCanViewProduct(detailData.product, userId, detailData.productStatus);
+    if (authError) {
+      return res.status(authError.status).render('403', { message: authError.message });
     }
+
+    // Filter rejected bidders (only for seller)
+    let rejectedBidders = [];
+    if (req.session.authUser && detailData.product.seller_id === req.session.authUser.id) {
+      rejectedBidders = detailData.rejectedBidders;
+    }
+
+    // Get flash messages from session
+    const success_message = req.session.success_message;
+    const error_message = req.session.error_message;
+    delete req.session.success_message;
+    delete req.session.error_message;
+
+    // Check if should show payment button (for seller or highest bidder when status is PENDING)
+    let showPaymentButton = false;
+    if (req.session.authUser && detailData.productStatus === 'PENDING') {
+      const currentUserId = req.session.authUser.id;
+      showPaymentButton = (detailData.product.seller_id === currentUserId || detailData.product.highest_bidder_id === currentUserId);
+    }
+
+    res.render('vwProduct/details', {
+      product: detailData.product,
+      productStatus: detailData.productStatus,
+      authUser: req.session.authUser,
+      descriptionUpdates: detailData.descriptionUpdates,
+      biddingHistory: detailData.biddingHistory,
+      rejectedBidders,
+      comments: detailData.comments,
+      success_message,
+      error_message,
+      related_products: detailData.related_products,
+      seller_rating_point: detailData.sellerRatingSummary.rating_point,
+      seller_has_reviews: detailData.sellerRatingSummary.reviews.length > 0,
+      bidder_rating_point: detailData.bidderRatingSummary.rating_point,
+      bidder_has_reviews: detailData.bidderRatingSummary.reviews.length > 0,
+      commentPage,
+      totalPages: detailData.totalPages,
+      totalComments: detailData.totalComments,
+      showPaymentButton
+    });
+  } catch (error) {
+    console.error('Product detail error:', error);
+    if (error.code === 'PRODUCT_NOT_FOUND') {
+      return res.status(404).render('404', { message: 'Product not found' });
+    }
+    return res.status(500).render('500', { message: 'Server error' });
   }
-
-  // Calculate total pages
-  const totalPages = Math.ceil(totalComments / commentsPerPage);
-
-  // Get flash messages from session
-  const success_message = req.session.success_message;
-  const error_message = req.session.error_message;
-  delete req.session.success_message;
-  delete req.session.error_message;
-
-  // Get seller rating
-  const sellerRatingSummary = await getUserRatingSummary(product.seller_id);
-
-  // Get bidder rating (if exists)
-  let bidderRatingSummary = { rating_point: null, reviews: [] };
-  if (product.highest_bidder_id) {
-    bidderRatingSummary = await getUserRatingSummary(product.highest_bidder_id);
-  }
-
-  // Check if should show payment button (for seller or highest bidder when status is PENDING)
-  let showPaymentButton = false;
-  if (req.session.authUser && productStatus === 'PENDING') {
-    const userId = req.session.authUser.id;
-    showPaymentButton = (product.seller_id === userId || product.highest_bidder_id === userId);
-  }
-
-  res.render('vwProduct/details', {
-    product,
-    productStatus, // Pass status to view
-    authUser: req.session.authUser, // Pass authUser for checking highest_bidder_id
-    descriptionUpdates,
-    biddingHistory,
-    rejectedBidders,
-    comments,
-    success_message,
-    error_message,
-    related_products,
-    seller_rating_point: sellerRatingSummary.rating_point,
-    seller_has_reviews: sellerRatingSummary.reviews.length > 0,
-    bidder_rating_point: bidderRatingSummary.rating_point,
-    bidder_has_reviews: bidderRatingSummary.reviews.length > 0,
-    commentPage,
-    totalPages,
-    totalComments,
-    showPaymentButton
-  });
 });
 
 // ROUTE: BIDDING HISTORY PAGE (Requires Authentication)
@@ -254,50 +152,40 @@ router.get('/bidding-history', isAuthenticated, async (req, res) => {
   }
 
   try {
-    // Get product information
-    const product = await productModel.findByProductId2(productId, null);
-
-    if (!product) {
-      return res.status(404).render('404', { message: 'Product not found' });
-    }
-
-    // Load bidding history
-    const biddingHistory = await biddingHistoryModel.getBiddingHistory(productId);
+    // Call service layer
+    const data = await productService.getBiddingHistoryPage(productId);
 
     res.render('vwProduct/biddingHistory', {
-      product,
-      biddingHistory
+      product: data.product,
+      biddingHistory: data.biddingHistory
     });
   } catch (error) {
     console.error('Error loading bidding history:', error);
+    if (error.code === 'PRODUCT_NOT_FOUND') {
+      return res.status(404).render('404', { message: 'Product not found' });
+    }
     res.status(500).render('500', { message: 'Unable to load bidding history' });
   }
 });
 
-// ROUTE 1: THÊM VÀO WATCHLIST (POST)
+// ROUTE 1: ADD TO WATCHLIST (POST)
 router.post('/watchlist', isAuthenticated, async (req, res) => {
   const userId = req.session.authUser.id;
   const productId = req.body.productId;
 
-  const isInWatchlist = await watchListModel.isInWatchlist(userId, productId);
-  if (!isInWatchlist) {
-    await watchListModel.addToWatchlist(userId, productId);
-  }
+  await watchlistService.addToWatchlist(userId, productId);
 
-  // SỬA LẠI: Lấy địa chỉ trang trước đó từ header
-  // Nếu không tìm thấy (trường hợp hiếm), quay về trang chủ '/'
   const retUrl = req.headers.referer || '/';
   res.redirect(retUrl);
 });
 
-// ROUTE 2: XÓA KHỎI WATCHLIST (DELETE)
+// ROUTE 2: REMOVE FROM WATCHLIST (DELETE)
 router.delete('/watchlist', isAuthenticated, async (req, res) => {
   const userId = req.session.authUser.id;
   const productId = req.body.productId;
 
-  await watchListModel.removeFromWatchlist(userId, productId);
+  await watchlistService.removeFromWatchlist(userId, productId);
 
-  // SỬA LẠI: Tương tự như trên
   const retUrl = req.headers.referer || '/';
   res.redirect(retUrl);
 });
@@ -387,116 +275,39 @@ router.post('/comment', isAuthenticated, async (req, res) => {
   const productId = String(req.body.productId);
   const { content, parentId } = req.body;
   const userId = req.session.authUser.id;
+  const productUrl = `${req.protocol}://${req.get('host')}/products/detail?id=${productId}`;
 
   try {
-    if (!content || content.trim().length === 0) {
-      req.session.error_message = 'Comment cannot be empty';
-      return res.redirect(`/products/detail?id=${productId}`);
-    }
-
-    // Create comment
-    await productCommentModel.createComment(productId, userId, content.trim(), parentId || null);
-
-    // Get product and users for email notification
-    const product = await productModel.findByProductId2(productId, null);
-    const seller = await userModel.findById(product.seller_id);
-    const productUrl = `${req.protocol}://${req.get('host')}/products/detail?id=${productId}`;
-
-    // Check if the commenter is the seller (seller is replying)
-    const isSellerReplying = userId === product.seller_id;
-
-    if (isSellerReplying && parentId) {
-      // Seller is replying to a question - notify all bidders and commenters
-      const bidders = await biddingHistoryModel.getUniqueBidders(productId);
-      const commenters = await productCommentModel.getUniqueCommenters(productId);
-
-      // Combine and remove duplicates (exclude seller)
-      const recipientsMap = new Map();
-
-      bidders.forEach(b => {
-        if (b.id !== product.seller_id && b.email) {
-          recipientsMap.set(b.id, { id: b.id, email: b.email, fullname: b.fullname });
-        }
-      });
-
-      commenters.forEach(c => {
-        if (c.id !== product.seller_id && c.email) {
-          recipientsMap.set(c.id, { id: c.id, email: c.email, fullname: c.fullname });
-        }
-      });
-
-      // Send seller answer notification via email service
-      sendSellerAnswerNotification({
-        productId,
-        productName: product.name,
-        sellerName: seller.fullname,
-        content: content.trim(),
-        productUrl,
-        recipients: Array.from(recipientsMap.values())
-      });
-    } else if (seller && seller.email && userId !== product.seller_id) {
-      // Non-seller commenting - send email to seller
-      sendSellerCommentNotification({
-        sellerId: product.seller_id,
-        commenterId: userId,
-        productName: product.name,
-        content: content.trim(),
-        isReply: !!parentId,
-        productUrl
-      });
-    }
+    // Call service layer
+    await commentService.postComment({
+      productId,
+      userId,
+      content,
+      parentId,
+      productUrl
+    });
 
     req.session.success_message = 'Comment posted successfully!';
     res.redirect(`/products/detail?id=${productId}`);
 
   } catch (error) {
     console.error('Post comment error:', error);
-    req.session.error_message = 'Failed to post comment. Please try again.';
+    req.session.error_message = error.message || 'Failed to post comment. Please try again.';
     res.redirect(`/products/detail?id=${productId}`);
   }
 });
 
 
-// ROUTE 4: GET BIDDING HISTORY
+// ROUTE 4: GET BIDDING HISTORY (API endpoint - returns JSON)
 router.get('/bid-history/:productId', async (req, res) => {
   try {
     const productId = parseInt(req.params.productId);
-    const history = await biddingHistoryModel.getBiddingHistory(productId);
-    res.json({ success: true, data: history });
+    const data = await productService.getBiddingHistoryPage(productId);
+    res.json({ success: true, data: data.biddingHistory });
   } catch (error) {
     console.error('Get bid history error:', error);
     res.status(500).json({ success: false, message: 'Unable to load bidding history' });
   }
-  const result = await productModel.findByProductId(productId);
-  const relatedProducts = await productModel.findRelatedProducts(productId);
-  const product = {
-    thumbnail: result[0].thumbnail,
-    sub_images: result.reduce((acc, curr) => {
-      if (curr.img_link) {
-        acc.push(curr.img_link);
-      }
-      return acc;
-    }, []),
-    id: result[0].id,
-    name: result[0].name,
-    starting_price: result[0].starting_price,
-    current_price: result[0].current_price,
-    seller_id: result[0].seller_id,
-    seller_fullname: result[0].seller_name,
-    seller_rating: result[0].seller_rating_plus / (result[0].seller_rating_plus + result[0].seller_rating_minus),
-    seller_member_since: new Date(result[0].seller_created_at).getFullYear(),
-    buy_now_price: result[0].buy_now_price,
-    seller_id: result[0].seller_id,
-    hightest_bidder_id: result[0].highest_bidder_id,
-    bidder_name: result[0].bidder_name,
-    category_name: result[0].category_name,
-    bid_count: result[0].bid_count,
-    created_at: result[0].created_at,
-    end_at: result[0].end_at,
-    description: result[0].description,
-    related_products: relatedProducts
-  }
-  res.render('vwProduct/details', { product });
 });
 
 
@@ -542,16 +353,8 @@ router.post('/unreject-bidder', isAuthenticated, async (req, res) => {
   const sellerId = req.session.authUser.id;
 
   try {
-    // Verify product ownership
-    const product = await productModel.findByProductId2(productId, sellerId);
-
-    // Verify product exists, seller ownership, and product is active
-    ensureProductExists(product);
-    ensureSellerOwnership(product, sellerId, 'unreject bidders');
-    ensureProductIsActive(product, 'unreject bidders');
-
-    // Remove from rejected_bidders table
-    await rejectedBidderModel.unrejectBidder(productId, bidderId);
+    // Call service layer
+    await productService.unrejectBidder({ productId, bidderId, sellerId });
 
     res.json({ success: true, message: 'Bidder can now bid on this product again' });
   } catch (error) {
@@ -599,13 +402,13 @@ router.get('/seller/:sellerId/ratings', async (req, res) => {
       return res.redirect('/');
     }
 
-    // Get seller info
-    const seller = await userModel.findById(sellerId);
+    // Get seller info via service
+    const seller = await UserService.getUserById(sellerId);
     if (!seller) {
       return res.redirect('/');
     }
 
-    // Get comprehensive rating summary
+    // Get comprehensive rating summary via service
     const ratingSummary = await getUserRatingSummary(sellerId);
 
     res.render('vwProduct/seller-ratings', {
@@ -632,22 +435,17 @@ router.get('/bidder/:bidderId/ratings', async (req, res) => {
       return res.redirect('/');
     }
 
-    // Get bidder info
-    const bidder = await userModel.findById(bidderId);
+    // Get bidder info with masked name via service
+    const bidder = await UserService.getUserWithMaskedName(bidderId);
     if (!bidder) {
       return res.redirect('/');
     }
 
-    // Get comprehensive rating summary
+    // Get comprehensive rating summary via service
     const ratingSummary = await getUserRatingSummary(bidderId);
 
-    // Mask bidder name
-    const maskedName = bidder.fullname ? bidder.fullname.split('').map((char, index) =>
-      index % 2 === 0 ? char : '*'
-    ).join('') : '';
-
     res.render('vwProduct/bidder-ratings', {
-      bidderName: maskedName,
+      bidderName: bidder.maskedName,
       rating_point: ratingSummary.rating_point,
       totalReviews: ratingSummary.totalReviews,
       positiveReviews: ratingSummary.positiveReviews,

@@ -5,7 +5,7 @@
  * @param {number} limit - Items per page (default: 3)
  * @returns {Object} Pagination parameters: offset, currentPage, totalPages, totalCount, from, to, limit
  */
-function paginate(page, totalCount, limit = 3) {
+export function paginate(page, totalCount, limit = 3) {
   const currentPage = parseInt(page) || 1;
   const total = parseInt(totalCount) || 0;
   const offset = (currentPage - 1) * limit;
@@ -30,5 +30,3 @@ function paginate(page, totalCount, limit = 3) {
     limit
   };
 }
-
-module.exports = { paginate };

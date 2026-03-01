@@ -2,224 +2,242 @@
 > ptudw-online-auction@1.0.0 test
 > cross-env NODE_OPTIONS=--experimental-vm-modules jest product.route.test.js
 
-(node:23508) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-(node:11580) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(node:4820) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
 (Use `node --trace-warnings ...` to show where the warning was created)
 PASS tests/admin.product.route.test.js
-PASS tests/product.route.test.js
+FAIL tests/product.route.test.js
   ● Console
 
-    console.log
-      Total products in category: 1
-
-      at routes/product.route.js:63:11
-
-    console.log
-      Total products in category: 0
-
-      at routes/product.route.js:63:11
-
-    console.log
-      Total products in category: 10
-
-      at routes/product.route.js:63:11
-
-    console.log
-      Total products in category: 0
-
-      at routes/product.route.js:63:11
-
-    console.log
-      Product details: {
-        id: 1,
-        name: 'Product 1',
-        seller_id: 10,
-        highest_bidder_id: null,
-        is_sold: null,
-        created_at: 2026-03-01T02:59:06.187Z,
-        end_at: 2026-03-02T02:59:06.187Z,
-        closed_at: null
+    console.error
+      Product detail error: Error: Product not found
+          at Module.getProductDetail (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\product.service.js:165:19)
+          at processTicksAndRejections (node:internal/process/task_queues:105:5)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:79:24 {
+        code: 'PRODUCT_NOT_FOUND'
       }
 
-      at routes/product.route.js:146:11
+    [0m [90m 136 |[39m     })[33m;[39m
+     [90m 137 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 138 |[39m     console[33m.[39merror([32m'Product detail error:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 139 |[39m     [36mif[39m (error[33m.[39mcode [33m===[39m [32m'PRODUCT_NOT_FOUND'[39m) {
+     [90m 140 |[39m       [36mreturn[39m res[33m.[39mstatus([35m404[39m)[33m.[39mrender([32m'404'[39m[33m,[39m { message[33m:[39m [32m'Product not found'[39m })[33m;[39m
+     [90m 141 |[39m     }[0m
 
-    console.log
-      Product details: {
-        id: 1,
-        name: 'Product 1',
-        seller_id: 10,
-        highest_bidder_id: 5,
-        is_sold: null,
-        created_at: 2026-03-01T02:59:06.214Z,
-        end_at: 2026-02-28T02:59:06.214Z,
-        closed_at: null
+      at routes/product.route.js:138:13
+
+    console.error
+      Error loading bidding history: Error: Product not found
+          at Module.getBiddingHistoryPage (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\product.service.js:254:19)
+          at processTicksAndRejections (node:internal/process/task_queues:105:5)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:156:18 {
+        code: 'PRODUCT_NOT_FOUND'
       }
 
-      at routes/product.route.js:146:11
+    [0m [90m 161 |[39m     })[33m;[39m
+     [90m 162 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 163 |[39m     console[33m.[39merror([32m'Error loading bidding history:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 164 |[39m     [36mif[39m (error[33m.[39mcode [33m===[39m [32m'PRODUCT_NOT_FOUND'[39m) {
+     [90m 165 |[39m       [36mreturn[39m res[33m.[39mstatus([35m404[39m)[33m.[39mrender([32m'404'[39m[33m,[39m { message[33m:[39m [32m'Product not found'[39m })[33m;[39m
+     [90m 166 |[39m     }[0m
 
-    console.log
-      Product details: {
-        id: 1,
-        name: 'Product 1',
-        seller_id: 10,
-        highest_bidder_id: 5,
-        is_sold: true,
-        created_at: 2026-03-01T02:59:06.226Z,
-        end_at: 2026-03-01T02:59:06.226Z,
-        closed_at: 2026-03-01T02:59:06.226Z
-      }
-
-      at routes/product.route.js:146:11
-
-    console.log
-      Product details: {
-        id: 1,
-        name: 'Product 1',
-        seller_id: 10,
-        highest_bidder_id: 5,
-        is_sold: true,
-        created_at: 2026-03-01T02:59:06.234Z,
-        end_at: 2026-03-01T02:59:06.234Z,
-        closed_at: 2026-03-01T02:59:06.234Z
-      }
-
-      at routes/product.route.js:146:11
-
-    console.log
-      Product details: {
-        id: 1,
-        name: 'Product 1',
-        seller_id: 10,
-        highest_bidder_id: null,
-        is_sold: null,
-        created_at: 2026-03-01T02:59:06.247Z,
-        end_at: 2026-03-02T02:59:06.247Z,
-        closed_at: null
-      }
-
-      at routes/product.route.js:146:11
-
-    console.log
-      Product details: {
-        id: 1,
-        name: 'Product 1',
-        seller_id: 10,
-        highest_bidder_id: null,
-        is_sold: null,
-        created_at: 2026-03-01T02:59:06.260Z,
-        end_at: 2026-03-02T02:59:06.260Z,
-        closed_at: null
-      }
-
-      at routes/product.route.js:146:11
+      at routes/product.route.js:163:13
 
     console.error
       Bid error: Error: You cannot bid on your own product
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:364:15
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:48:13
           at processTicksAndRejections (node:internal/process/task_queues:105:5)
           at Object.<anonymous> (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\tests\product.route.test.js:716:16)
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:342:20
+          at Module.placeBid (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:24:18)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:203:20
 
-    [0m [90m 781 |[39m
-     [90m 782 |[39m   } [36mcatch[39m (error) {
-    [31m[1m>[22m[39m[90m 783 |[39m     console[33m.[39merror([32m'Bid error:'[39m[33m,[39m error)[33m;[39m
+    [0m [90m 232 |[39m
+     [90m 233 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 234 |[39m     console[33m.[39merror([32m'Bid error:'[39m[33m,[39m error)[33m;[39m
      [90m     |[39m             [31m[1m^[22m[39m
-     [90m 784 |[39m     req[33m.[39msession[33m.[39merror_message [33m=[39m error[33m.[39mmessage [33m||[39m [32m'An error occurred while placing bid. Please try again.'[39m[33m;[39m
-     [90m 785 |[39m     res[33m.[39mredirect([32m`/products/detail?id=${productId}`[39m)[33m;[39m
-     [90m 786 |[39m   }[0m
+     [90m 235 |[39m     req[33m.[39msession[33m.[39merror_message [33m=[39m error[33m.[39mmessage [33m||[39m [32m'An error occurred while placing bid. Please try again.'[39m[33m;[39m
+     [90m 236 |[39m     res[33m.[39mredirect([32m`/products/detail?id=${productId}`[39m)[33m;[39m
+     [90m 237 |[39m   }[0m
 
-      at routes/product.route.js:783:13
+      at routes/product.route.js:234:13
 
     console.error
       Bid error: Error: Auction has ended
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:399:15
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:83:13
           at processTicksAndRejections (node:internal/process/task_queues:105:5)
           at Object.<anonymous> (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\tests\product.route.test.js:744:16)
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:342:20
+          at Module.placeBid (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:24:18)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:203:20
 
-    [0m [90m 781 |[39m
-     [90m 782 |[39m   } [36mcatch[39m (error) {
-    [31m[1m>[22m[39m[90m 783 |[39m     console[33m.[39merror([32m'Bid error:'[39m[33m,[39m error)[33m;[39m
+    [0m [90m 232 |[39m
+     [90m 233 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 234 |[39m     console[33m.[39merror([32m'Bid error:'[39m[33m,[39m error)[33m;[39m
      [90m     |[39m             [31m[1m^[22m[39m
-     [90m 784 |[39m     req[33m.[39msession[33m.[39merror_message [33m=[39m error[33m.[39mmessage [33m||[39m [32m'An error occurred while placing bid. Please try again.'[39m[33m;[39m
-     [90m 785 |[39m     res[33m.[39mredirect([32m`/products/detail?id=${productId}`[39m)[33m;[39m
-     [90m 786 |[39m   }[0m
+     [90m 235 |[39m     req[33m.[39msession[33m.[39merror_message [33m=[39m error[33m.[39mmessage [33m||[39m [32m'An error occurred while placing bid. Please try again.'[39m[33m;[39m
+     [90m 236 |[39m     res[33m.[39mredirect([32m`/products/detail?id=${productId}`[39m)[33m;[39m
+     [90m 237 |[39m   }[0m
 
-      at routes/product.route.js:783:13
+      at routes/product.route.js:234:13
 
     console.error
       Bid error: Error: You have been rejected from bidding on this product by the seller
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:374:15
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:58:13
           at processTicksAndRejections (node:internal/process/task_queues:105:5)
           at Object.<anonymous> (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\tests\product.route.test.js:785:16)
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:342:20
+          at Module.placeBid (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:24:18)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:203:20
 
-    [0m [90m 781 |[39m
-     [90m 782 |[39m   } [36mcatch[39m (error) {
-    [31m[1m>[22m[39m[90m 783 |[39m     console[33m.[39merror([32m'Bid error:'[39m[33m,[39m error)[33m;[39m
+    [0m [90m 232 |[39m
+     [90m 233 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 234 |[39m     console[33m.[39merror([32m'Bid error:'[39m[33m,[39m error)[33m;[39m
      [90m     |[39m             [31m[1m^[22m[39m
-     [90m 784 |[39m     req[33m.[39msession[33m.[39merror_message [33m=[39m error[33m.[39mmessage [33m||[39m [32m'An error occurred while placing bid. Please try again.'[39m[33m;[39m
-     [90m 785 |[39m     res[33m.[39mredirect([32m`/products/detail?id=${productId}`[39m)[33m;[39m
-     [90m 786 |[39m   }[0m
+     [90m 235 |[39m     req[33m.[39msession[33m.[39merror_message [33m=[39m error[33m.[39mmessage [33m||[39m [32m'An error occurred while placing bid. Please try again.'[39m[33m;[39m
+     [90m 236 |[39m     res[33m.[39mredirect([32m`/products/detail?id=${productId}`[39m)[33m;[39m
+     [90m 237 |[39m   }[0m
 
-      at routes/product.route.js:783:13
+      at routes/product.route.js:234:13
 
     console.error
       Bid error: TypeError: trx(...).where(...).update is not a function
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:539:10
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:205:8
           at processTicksAndRejections (node:internal/process/task_queues:105:5)
           at Object.<anonymous> (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\tests\product.route.test.js:813:16)
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:342:20
+          at Module.placeBid (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:24:18)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:203:20
 
-    [0m [90m 781 |[39m
-     [90m 782 |[39m   } [36mcatch[39m (error) {
-    [31m[1m>[22m[39m[90m 783 |[39m     console[33m.[39merror([32m'Bid error:'[39m[33m,[39m error)[33m;[39m
+    [0m [90m 232 |[39m
+     [90m 233 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 234 |[39m     console[33m.[39merror([32m'Bid error:'[39m[33m,[39m error)[33m;[39m
      [90m     |[39m             [31m[1m^[22m[39m
-     [90m 784 |[39m     req[33m.[39msession[33m.[39merror_message [33m=[39m error[33m.[39mmessage [33m||[39m [32m'An error occurred while placing bid. Please try again.'[39m[33m;[39m
-     [90m 785 |[39m     res[33m.[39mredirect([32m`/products/detail?id=${productId}`[39m)[33m;[39m
-     [90m 786 |[39m   }[0m
+     [90m 235 |[39m     req[33m.[39msession[33m.[39merror_message [33m=[39m error[33m.[39mmessage [33m||[39m [32m'An error occurred while placing bid. Please try again.'[39m[33m;[39m
+     [90m 236 |[39m     res[33m.[39mredirect([32m`/products/detail?id=${productId}`[39m)[33m;[39m
+     [90m 237 |[39m   }[0m
 
-      at routes/product.route.js:783:13
+      at routes/product.route.js:234:13
 
     console.error
       Bid error: Error: This seller does not allow unrated bidders to bid on this product.
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:385:17
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:69:15
           at processTicksAndRejections (node:internal/process/task_queues:105:5)
           at Object.<anonymous> (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\tests\product.route.test.js:844:16)
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:342:20
+          at Module.placeBid (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:24:18)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:203:20
 
-    [0m [90m 781 |[39m
-     [90m 782 |[39m   } [36mcatch[39m (error) {
-    [31m[1m>[22m[39m[90m 783 |[39m     console[33m.[39merror([32m'Bid error:'[39m[33m,[39m error)[33m;[39m
+    [0m [90m 232 |[39m
+     [90m 233 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 234 |[39m     console[33m.[39merror([32m'Bid error:'[39m[33m,[39m error)[33m;[39m
      [90m     |[39m             [31m[1m^[22m[39m
-     [90m 784 |[39m     req[33m.[39msession[33m.[39merror_message [33m=[39m error[33m.[39mmessage [33m||[39m [32m'An error occurred while placing bid. Please try again.'[39m[33m;[39m
-     [90m 785 |[39m     res[33m.[39mredirect([32m`/products/detail?id=${productId}`[39m)[33m;[39m
-     [90m 786 |[39m   }[0m
+     [90m 235 |[39m     req[33m.[39msession[33m.[39merror_message [33m=[39m error[33m.[39mmessage [33m||[39m [32m'An error occurred while placing bid. Please try again.'[39m[33m;[39m
+     [90m 236 |[39m     res[33m.[39mredirect([32m`/products/detail?id=${productId}`[39m)[33m;[39m
+     [90m 237 |[39m   }[0m
 
-      at routes/product.route.js:783:13
+      at routes/product.route.js:234:13
 
     console.error
       Bid error: Error: Bid must be at least 10 VND higher than current price
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:414:15
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:96:13
           at processTicksAndRejections (node:internal/process/task_queues:105:5)
           at Object.<anonymous> (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\tests\product.route.test.js:877:16)
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:342:20
+          at Module.placeBid (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:24:18)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:203:20
 
-    [0m [90m 781 |[39m
-     [90m 782 |[39m   } [36mcatch[39m (error) {
-    [31m[1m>[22m[39m[90m 783 |[39m     console[33m.[39merror([32m'Bid error:'[39m[33m,[39m error)[33m;[39m
+    [0m [90m 232 |[39m
+     [90m 233 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 234 |[39m     console[33m.[39merror([32m'Bid error:'[39m[33m,[39m error)[33m;[39m
      [90m     |[39m             [31m[1m^[22m[39m
-     [90m 784 |[39m     req[33m.[39msession[33m.[39merror_message [33m=[39m error[33m.[39mmessage [33m||[39m [32m'An error occurred while placing bid. Please try again.'[39m[33m;[39m
-     [90m 785 |[39m     res[33m.[39mredirect([32m`/products/detail?id=${productId}`[39m)[33m;[39m
-     [90m 786 |[39m   }[0m
+     [90m 235 |[39m     req[33m.[39msession[33m.[39merror_message [33m=[39m error[33m.[39mmessage [33m||[39m [32m'An error occurred while placing bid. Please try again.'[39m[33m;[39m
+     [90m 236 |[39m     res[33m.[39mredirect([32m`/products/detail?id=${productId}`[39m)[33m;[39m
+     [90m 237 |[39m   }[0m
 
-      at routes/product.route.js:783:13
+      at routes/product.route.js:234:13
+
+    console.log
+      seller comment notification sent to seller@test.com
+
+      at safeSendMail (services/email.service.js:15:13)
+
+    console.error
+      Post comment error: Error: Comment cannot be empty
+          at Module.postComment (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\comment.service.js:18:11)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:282:26
+          at Layer.handleRequest (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\lib\layer.js:152:17)
+          at next (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\lib\route.js:157:13)
+          at isAuthenticated (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\tests\product.route.test.js:90:7)
+          at Layer.handleRequest (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\lib\layer.js:152:17)
+          at next (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\lib\route.js:157:13)
+          at Route.dispatch (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\lib\route.js:117:3)
+          at handle (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:435:11)
+          at Layer.handleRequest (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\lib\layer.js:152:17)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:295:15
+          at processParams (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:582:12)
+          at next (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:291:5)
+          at Function.handle (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:186:3)
+          at router (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:60:12)
+          at Layer.handleRequest (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\lib\layer.js:152:17)
+          at trimPrefix (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:342:13)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:297:9
+          at processParams (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:582:12)
+          at next (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:291:5)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\tests\product.route.test.js:135:7
+          at Layer.handleRequest (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\lib\layer.js:152:17)
+          at trimPrefix (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:342:13)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:297:9
+          at processParams (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:582:12)
+          at next (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:291:5)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\tests\product.route.test.js:124:7
+          at Layer.handleRequest (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\lib\layer.js:152:17)
+          at trimPrefix (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:342:13)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:297:9
+          at processParams (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:582:12)
+          at next (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:291:5)
+          at read (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\body-parser\lib\read.js:43:5)
+          at urlencodedParser (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\body-parser\lib\types\urlencoded.js:58:5)
+          at Layer.handleRequest (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\lib\layer.js:152:17)
+          at trimPrefix (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:342:13)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:297:9
+          at processParams (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:582:12)
+          at next (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\router\index.js:291:5)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\body-parser\lib\read.js:172:5
+          at AsyncResource.runInAsyncScope (node:async_hooks:214:14)
+          at invokeCallback (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\raw-body\index.js:238:16)
+          at done (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\raw-body\index.js:227:7)
+          at IncomingMessage.onEnd (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\raw-body\index.js:287:7)
+          at IncomingMessage.emit (node:events:519:28)
+          at endReadableNT (node:internal/streams/readable:1698:12)
+          at processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+    [0m [90m 292 |[39m
+     [90m 293 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 294 |[39m     console[33m.[39merror([32m'Post comment error:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 295 |[39m     req[33m.[39msession[33m.[39merror_message [33m=[39m error[33m.[39mmessage [33m||[39m [32m'Failed to post comment. Please try again.'[39m[33m;[39m
+     [90m 296 |[39m     res[33m.[39mredirect([32m`/products/detail?id=${productId}`[39m)[33m;[39m
+     [90m 297 |[39m   }[0m
+
+      at routes/product.route.js:294:13
+
+    console.log
+      seller comment notification sent to seller@test.com
+
+      at safeSendMail (services/email.service.js:15:13)
+
+    console.log
+      seller answer notification to bidder@test.com sent to bidder@test.com
+
+      at safeSendMail (services/email.service.js:15:13)
+          at async Promise.all (index 0)
+
+    console.log
+      seller answer notification to commenter@test.com sent to commenter@test.com
+
+      at safeSendMail (services/email.service.js:15:13)
+          at async Promise.all (index 1)
 
     console.log
       Seller reply notification sent to 2 recipients
 
-      at routes/product.route.js:897:15
+      at services/email.service.js:189:17
 
     console.error
       Get bid history error: Error: DB error
@@ -237,126 +255,164 @@ PASS tests/product.route.test.js
           at run (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\jest-circus\build\jestAdapterInit.js:761:3)
           at runAndTransformResultsToJestFormat (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\jest-circus\build\jestAdapterInit.js:1918:21)
           at jestAdapter (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\jest-circus\build\runner.js:101:19)
-          at runTestInternal (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\jest-runner\build\testWorker.js:275:16)
-          at runTest (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\jest-runner\build\testWorker.js:343:7)
-          at Object.worker (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\jest-runner\build\testWorker.js:497:12)
+          at runTestInternal (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\jest-runner\build\index.js:275:16)
+          at runTest (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\node_modules\jest-runner\build\index.js:343:7)
 
-    [0m [90m 963 |[39m     res[33m.[39mjson({ success[33m:[39m [36mtrue[39m[33m,[39m data[33m:[39m history })[33m;[39m
-     [90m 964 |[39m   } [36mcatch[39m (error) {
-    [31m[1m>[22m[39m[90m 965 |[39m     console[33m.[39merror([32m'Get bid history error:'[39m[33m,[39m error)[33m;[39m
+    [0m [90m 306 |[39m     res[33m.[39mjson({ success[33m:[39m [36mtrue[39m[33m,[39m data[33m:[39m data[33m.[39mbiddingHistory })[33m;[39m
+     [90m 307 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 308 |[39m     console[33m.[39merror([32m'Get bid history error:'[39m[33m,[39m error)[33m;[39m
      [90m     |[39m             [31m[1m^[22m[39m
-     [90m 966 |[39m     res[33m.[39mstatus([35m500[39m)[33m.[39mjson({ success[33m:[39m [36mfalse[39m[33m,[39m message[33m:[39m [32m'Unable to load bidding history'[39m })[33m;[39m
-     [90m 967 |[39m   }
-     [90m 968 |[39m   [36mconst[39m result [33m=[39m [36mawait[39m productModel[33m.[39mfindByProductId(productId)[33m;[39m[0m
+     [90m 309 |[39m     res[33m.[39mstatus([35m500[39m)[33m.[39mjson({ success[33m:[39m [36mfalse[39m[33m,[39m message[33m:[39m [32m'Unable to load bidding history'[39m })[33m;[39m
+     [90m 310 |[39m   }
+     [90m 311 |[39m })[33m;[39m[0m
 
-      at routes/product.route.js:965:13
-
-    console.log
-      Rejection email sent to bidder@test.com for product #1
-
-      at routes/product.route.js:1186:17
+      at routes/product.route.js:308:13
 
     console.error
-      Error rejecting bidder: Error: Only the seller can reject bidders
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:1024:15
+      Error rejecting bidder: TypeError: trx(...).where(...).select is not a function
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:310:8
+          at processTicksAndRejections (node:internal/process/task_queues:105:5)
+          at Object.<anonymous> (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\tests\product.route.test.js:1180:16)
+          at Module.rejectBidder (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:273:18)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:321:20
+
+    [0m [90m 339 |[39m     res[33m.[39mjson({ success[33m:[39m [36mtrue[39m[33m,[39m message[33m:[39m [32m'Bidder rejected successfully'[39m })[33m;[39m
+     [90m 340 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 341 |[39m     console[33m.[39merror([32m'Error rejecting bidder:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 342 |[39m     res[33m.[39mstatus([35m400[39m)[33m.[39mjson({
+     [90m 343 |[39m       success[33m:[39m [36mfalse[39m[33m,[39m
+     [90m 344 |[39m       message[33m:[39m error[33m.[39mmessage [33m||[39m [32m'Failed to reject bidder'[39m[0m
+
+      at routes/product.route.js:341:13
+
+    console.error
+      Error rejecting bidder: Error: You do not own this product
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:285:13
           at processTicksAndRejections (node:internal/process/task_queues:105:5)
           at Object.<anonymous> (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\tests\product.route.test.js:1207:16)
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:1012:5
+          at Module.rejectBidder (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:273:18)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:321:20
 
-    [0m [90m 1192 |[39m     res[33m.[39mjson({ success[33m:[39m [36mtrue[39m[33m,[39m message[33m:[39m [32m'Bidder rejected successfully'[39m })[33m;[39m
-     [90m 1193 |[39m   } [36mcatch[39m (error) {
-    [31m[1m>[22m[39m[90m 1194 |[39m     console[33m.[39merror([32m'Error rejecting bidder:'[39m[33m,[39m error)[33m;[39m
-     [90m      |[39m             [31m[1m^[22m[39m
-     [90m 1195 |[39m     res[33m.[39mstatus([35m400[39m)[33m.[39mjson({
-     [90m 1196 |[39m       success[33m:[39m [36mfalse[39m[33m,[39m
-     [90m 1197 |[39m       message[33m:[39m error[33m.[39mmessage [33m||[39m [32m'Failed to reject bidder'[39m[0m
+    [0m [90m 339 |[39m     res[33m.[39mjson({ success[33m:[39m [36mtrue[39m[33m,[39m message[33m:[39m [32m'Bidder rejected successfully'[39m })[33m;[39m
+     [90m 340 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 341 |[39m     console[33m.[39merror([32m'Error rejecting bidder:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 342 |[39m     res[33m.[39mstatus([35m400[39m)[33m.[39mjson({
+     [90m 343 |[39m       success[33m:[39m [36mfalse[39m[33m,[39m
+     [90m 344 |[39m       message[33m:[39m error[33m.[39mmessage [33m||[39m [32m'Failed to reject bidder'[39m[0m
 
-      at routes/product.route.js:1194:13
+      at routes/product.route.js:341:13
 
     console.error
       Error rejecting bidder: Error: Product not found
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:1020:15
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:281:13
           at processTicksAndRejections (node:internal/process/task_queues:105:5)
           at Object.<anonymous> (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\tests\product.route.test.js:1225:16)
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:1012:5
+          at Module.rejectBidder (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:273:18)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:321:20
 
-    [0m [90m 1192 |[39m     res[33m.[39mjson({ success[33m:[39m [36mtrue[39m[33m,[39m message[33m:[39m [32m'Bidder rejected successfully'[39m })[33m;[39m
-     [90m 1193 |[39m   } [36mcatch[39m (error) {
-    [31m[1m>[22m[39m[90m 1194 |[39m     console[33m.[39merror([32m'Error rejecting bidder:'[39m[33m,[39m error)[33m;[39m
-     [90m      |[39m             [31m[1m^[22m[39m
-     [90m 1195 |[39m     res[33m.[39mstatus([35m400[39m)[33m.[39mjson({
-     [90m 1196 |[39m       success[33m:[39m [36mfalse[39m[33m,[39m
-     [90m 1197 |[39m       message[33m:[39m error[33m.[39mmessage [33m||[39m [32m'Failed to reject bidder'[39m[0m
+    [0m [90m 339 |[39m     res[33m.[39mjson({ success[33m:[39m [36mtrue[39m[33m,[39m message[33m:[39m [32m'Bidder rejected successfully'[39m })[33m;[39m
+     [90m 340 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 341 |[39m     console[33m.[39merror([32m'Error rejecting bidder:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 342 |[39m     res[33m.[39mstatus([35m400[39m)[33m.[39mjson({
+     [90m 343 |[39m       success[33m:[39m [36mfalse[39m[33m,[39m
+     [90m 344 |[39m       message[33m:[39m error[33m.[39mmessage [33m||[39m [32m'Failed to reject bidder'[39m[0m
 
-      at routes/product.route.js:1194:13
+      at routes/product.route.js:341:13
 
     console.error
-      Error rejecting bidder: Error: Can only reject bidders for active auctions
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:1032:15
+      Error rejecting bidder: Error: Cannot reject bidders on inactive products
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:294:13
           at processTicksAndRejections (node:internal/process/task_queues:105:5)
           at Object.<anonymous> (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\tests\product.route.test.js:1251:16)
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:1012:5
+          at Module.rejectBidder (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:273:18)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:321:20
 
-    [0m [90m 1192 |[39m     res[33m.[39mjson({ success[33m:[39m [36mtrue[39m[33m,[39m message[33m:[39m [32m'Bidder rejected successfully'[39m })[33m;[39m
-     [90m 1193 |[39m   } [36mcatch[39m (error) {
-    [31m[1m>[22m[39m[90m 1194 |[39m     console[33m.[39merror([32m'Error rejecting bidder:'[39m[33m,[39m error)[33m;[39m
-     [90m      |[39m             [31m[1m^[22m[39m
-     [90m 1195 |[39m     res[33m.[39mstatus([35m400[39m)[33m.[39mjson({
-     [90m 1196 |[39m       success[33m:[39m [36mfalse[39m[33m,[39m
-     [90m 1197 |[39m       message[33m:[39m error[33m.[39mmessage [33m||[39m [32m'Failed to reject bidder'[39m[0m
+    [0m [90m 339 |[39m     res[33m.[39mjson({ success[33m:[39m [36mtrue[39m[33m,[39m message[33m:[39m [32m'Bidder rejected successfully'[39m })[33m;[39m
+     [90m 340 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 341 |[39m     console[33m.[39merror([32m'Error rejecting bidder:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 342 |[39m     res[33m.[39mstatus([35m400[39m)[33m.[39mjson({
+     [90m 343 |[39m       success[33m:[39m [36mfalse[39m[33m,[39m
+     [90m 344 |[39m       message[33m:[39m error[33m.[39mmessage [33m||[39m [32m'Failed to reject bidder'[39m[0m
 
-      at routes/product.route.js:1194:13
+      at routes/product.route.js:341:13
 
     console.error
       Error rejecting bidder: Error: This bidder has not placed a bid on this product
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:1042:15
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:304:13
           at processTicksAndRejections (node:internal/process/task_queues:105:5)
           at Object.<anonymous> (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\tests\product.route.test.js:1287:16)
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:1012:5
+          at Module.rejectBidder (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\bid.service.js:273:18)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:321:20
 
-    [0m [90m 1192 |[39m     res[33m.[39mjson({ success[33m:[39m [36mtrue[39m[33m,[39m message[33m:[39m [32m'Bidder rejected successfully'[39m })[33m;[39m
-     [90m 1193 |[39m   } [36mcatch[39m (error) {
-    [31m[1m>[22m[39m[90m 1194 |[39m     console[33m.[39merror([32m'Error rejecting bidder:'[39m[33m,[39m error)[33m;[39m
-     [90m      |[39m             [31m[1m^[22m[39m
-     [90m 1195 |[39m     res[33m.[39mstatus([35m400[39m)[33m.[39mjson({
-     [90m 1196 |[39m       success[33m:[39m [36mfalse[39m[33m,[39m
-     [90m 1197 |[39m       message[33m:[39m error[33m.[39mmessage [33m||[39m [32m'Failed to reject bidder'[39m[0m
+    [0m [90m 339 |[39m     res[33m.[39mjson({ success[33m:[39m [36mtrue[39m[33m,[39m message[33m:[39m [32m'Bidder rejected successfully'[39m })[33m;[39m
+     [90m 340 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 341 |[39m     console[33m.[39merror([32m'Error rejecting bidder:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 342 |[39m     res[33m.[39mstatus([35m400[39m)[33m.[39mjson({
+     [90m 343 |[39m       success[33m:[39m [36mfalse[39m[33m,[39m
+     [90m 344 |[39m       message[33m:[39m error[33m.[39mmessage [33m||[39m [32m'Failed to reject bidder'[39m[0m
 
-      at routes/product.route.js:1194:13
+      at routes/product.route.js:341:13
 
     console.error
-      Error unrejecting bidder: Error: Only the seller can unreject bidders
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:1217:13
+      Error unrejecting bidder: Error: You do not own this product
+          at Module.unrejectBidder (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\product.service.js:281:11)
           at processTicksAndRejections (node:internal/process/task_queues:105:5)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:357:5
 
-    [0m [90m 1231 |[39m     res[33m.[39mjson({ success[33m:[39m [36mtrue[39m[33m,[39m message[33m:[39m [32m'Bidder can now bid on this product again'[39m })[33m;[39m
-     [90m 1232 |[39m   } [36mcatch[39m (error) {
-    [31m[1m>[22m[39m[90m 1233 |[39m     console[33m.[39merror([32m'Error unrejecting bidder:'[39m[33m,[39m error)[33m;[39m
-     [90m      |[39m             [31m[1m^[22m[39m
-     [90m 1234 |[39m     res[33m.[39mstatus([35m400[39m)[33m.[39mjson({
-     [90m 1235 |[39m       success[33m:[39m [36mfalse[39m[33m,[39m
-     [90m 1236 |[39m       message[33m:[39m error[33m.[39mmessage [33m||[39m [32m'Failed to unreject bidder'[39m[0m
+    [0m [90m 359 |[39m     res[33m.[39mjson({ success[33m:[39m [36mtrue[39m[33m,[39m message[33m:[39m [32m'Bidder can now bid on this product again'[39m })[33m;[39m
+     [90m 360 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 361 |[39m     console[33m.[39merror([32m'Error unrejecting bidder:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 362 |[39m     res[33m.[39mstatus([35m400[39m)[33m.[39mjson({
+     [90m 363 |[39m       success[33m:[39m [36mfalse[39m[33m,[39m
+     [90m 364 |[39m       message[33m:[39m error[33m.[39mmessage [33m||[39m [32m'Failed to unreject bidder'[39m[0m
 
-      at routes/product.route.js:1233:13
+      at routes/product.route.js:361:13
 
     console.error
       Error unrejecting bidder: Error: Product not found
-          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:1213:13
+          at Module.unrejectBidder (C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\services\product.service.js:277:11)
           at processTicksAndRejections (node:internal/process/task_queues:105:5)
+          at C:\Users\Duy\Desktop\GA01-Design-Principles\auction-web\src\routes\product.route.js:357:5
 
-    [0m [90m 1231 |[39m     res[33m.[39mjson({ success[33m:[39m [36mtrue[39m[33m,[39m message[33m:[39m [32m'Bidder can now bid on this product again'[39m })[33m;[39m
-     [90m 1232 |[39m   } [36mcatch[39m (error) {
-    [31m[1m>[22m[39m[90m 1233 |[39m     console[33m.[39merror([32m'Error unrejecting bidder:'[39m[33m,[39m error)[33m;[39m
-     [90m      |[39m             [31m[1m^[22m[39m
-     [90m 1234 |[39m     res[33m.[39mstatus([35m400[39m)[33m.[39mjson({
-     [90m 1235 |[39m       success[33m:[39m [36mfalse[39m[33m,[39m
-     [90m 1236 |[39m       message[33m:[39m error[33m.[39mmessage [33m||[39m [32m'Failed to unreject bidder'[39m[0m
+    [0m [90m 359 |[39m     res[33m.[39mjson({ success[33m:[39m [36mtrue[39m[33m,[39m message[33m:[39m [32m'Bidder can now bid on this product again'[39m })[33m;[39m
+     [90m 360 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 361 |[39m     console[33m.[39merror([32m'Error unrejecting bidder:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 362 |[39m     res[33m.[39mstatus([35m400[39m)[33m.[39mjson({
+     [90m 363 |[39m       success[33m:[39m [36mfalse[39m[33m,[39m
+     [90m 364 |[39m       message[33m:[39m error[33m.[39mmessage [33m||[39m [32m'Failed to unreject bidder'[39m[0m
 
-      at routes/product.route.js:1233:13
+      at routes/product.route.js:361:13
 
+  ● Product Routes › POST /reject-bidder › should reject bidder successfully
 
-Test Suites: 2 passed, 2 total
-Tests:       68 passed, 68 total
+    expected 200 "OK", got 400 "Bad Request"
+
+    [0m [90m 1186 |[39m         [33m.[39mpost([32m'/products/reject-bidder'[39m)
+     [90m 1187 |[39m         [33m.[39msend({ productId[33m:[39m [35m1[39m[33m,[39m bidderId[33m:[39m [35m5[39m })
+    [31m[1m>[22m[39m[90m 1188 |[39m         [33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m      |[39m          [31m[1m^[22m[39m
+     [90m 1189 |[39m
+     [90m 1190 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+     [90m 1191 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/product.route.test.js:1188:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:309:14)
+      at node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (node_modules/supertest/lib/test.js:195:23)
+      at localAssert (node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (node_modules/supertest/lib/test.js:152:11)
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       1 failed, 67 passed, 68 total
 Snapshots:   0 total
-Time:        3.183 s
+Time:        2.237 s
 Ran all test suites matching product.route.test.js.

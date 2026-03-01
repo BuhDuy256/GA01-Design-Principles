@@ -62,7 +62,7 @@ function ensureCanViewProduct(product, userId, productStatus) {
   return null;
 }
 
-module.exports = {
+export {
   ensureProductExists,
   ensureSellerOwnership,
   ensureCanViewProduct,
