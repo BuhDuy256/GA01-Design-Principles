@@ -18,7 +18,7 @@ import { parsePostgresArray } from '../utils/dbHelpers.js';
 import { paginate } from '../utils/pagination.js';
 import { ensureProductExists, ensureSellerOwnership, ensureCanViewProduct, ensureProductIsActive, ensureNotSeller } from '../utils/productAuthorization.js';
 import * as orderService from '../services/order.service.js';
-import { getUserRatingSummary } from '../services/ratingService.js';
+import { getUserRatingSummary } from '../services/rating.service.js';
 const router = express.Router();
 
 const prepareProductList = async (products) => {
